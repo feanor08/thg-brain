@@ -1,0 +1,13 @@
+[Unit]
+Description=Backup THG Lore to switchboard
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/thg-brain/scripts/backup-lore.sh
+
+[Install]
+WantedBy=multi-user.target

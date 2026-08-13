@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily THG Lore backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 Asia/Kolkata
+Persistent=true
+RandomizedDelaySec=10m
+Unit=lore-backup.service
+
+[Install]
+WantedBy=timers.target
