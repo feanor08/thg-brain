@@ -6,7 +6,6 @@ services:
 
     environment:
       TZ: Asia/Kolkata
-      TRILIUM_NETWORK_TRUSTEDREVERSEPROXY: "true"
 
     ports:
       - "192.168.0.112:8080:8080"
