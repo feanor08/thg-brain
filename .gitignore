@@ -1,0 +1,13 @@
+.env
+.env.*
+*.secret
+*.key
+*.pem
+
+trilium-data/
+data/
+backups/
+
+.DS_Store
+*.log
+*.bak

@@ -1,0 +1,14 @@
+services:
+  trilium:
+    image: triliumnext/trilium:v0.104.1
+    container_name: thg-brain-trilium
+    restart: unless-stopped
+
+    environment:
+      TZ: Asia/Kolkata
+
+    ports:
+      - "192.168.0.112:8080:8080"
+
+    volumes:
+      - /opt/thg-brain-data/trilium-data:/home/node/trilium-data
