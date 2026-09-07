@@ -1,0 +1,20 @@
+{
+  "executor": "deployed inspector_readonly",
+  "after": "exact-artifact approval and Mac/human operator deployment",
+  "steps": [
+    {
+      "tool": "get_service_health",
+      "args": {"service": "lore"},
+      "expect": {"status": "ok"},
+      "failure_classification": "action_required"
+    },
+    {
+      "tool": "get_route_health",
+      "args": {"route": "lore"},
+      "expect": {"status": "ok"},
+      "failure_classification": "action_required"
+    }
+  ],
+  "recent_logs": "Omitted until the frozen deployed contract is inspected and confirms a bounded Lore-only get_recent_service_logs mapping; no generic fallback.",
+  "limitation": "Inspector proves infrastructure health, not visual pixels. This file is a plan, not execution evidence."
+}

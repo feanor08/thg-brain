@@ -1,0 +1,17 @@
+/* Scoped by a successfully rendered widget: a script failure leaves native Lore usable. */
+:root[data-thg-sublime] {
+    --thg-font: "Fira Code", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+    --thg-editor-size: 23px;
+    --thg-editor-line: 30px;
+    --main-font-family: var(--thg-font);
+    --tree-font-family: var(--thg-font);
+    --detail-font-family: var(--thg-font);
+    --monospace-font-family: var(--thg-font);
+    --detail-font-size: var(--thg-editor-size);
+    --monospace-font-size: var(--thg-editor-size);
+}
+:root[data-thg-sublime] :is(.note-title, .inline-title, .note-tab-title, .fancytree-title, .thg-sublime-status, .thg-sublime-status select) {
+    font-family: var(--thg-font) !important;
+    font-variant-ligatures: contextual common-ligatures;
+    font-feature-settings: "liga" 1, "calt" 1;
+}

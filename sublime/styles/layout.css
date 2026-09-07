@@ -1,0 +1,16 @@
+/* Do not hide ribbons, actions, attributes or split controls. */
+@media (min-width: 901px) {
+    :root[data-thg-sublime] body.desktop .title-row > * { margin: 2px !important; }
+    :root[data-thg-sublime] body.desktop .note-title-widget input.note-title {
+        font-size: 17px !important;
+        padding: 2px 4px !important;
+        min-height: 28px;
+    }
+    :root[data-thg-sublime] body.desktop .inline-title { margin-block: 4px !important; padding-block: 2px !important; }
+    :root[data-thg-sublime] body.desktop .inline-title input { font-size: 20px !important; }
+    :root[data-thg-sublime] body.desktop .ribbon-top-row { padding-block: 0 !important; }
+    :root[data-thg-sublime] body.desktop { scrollbar-width: thin; scrollbar-color: var(--thg-ui-border) var(--thg-ui-bg); }
+    :root[data-thg-sublime] body.desktop * { scrollbar-width: thin; }
+    :root[data-thg-sublime] body.desktop ::-webkit-scrollbar { width: 7px; height: 7px; }
+    :root[data-thg-sublime] body.desktop ::-webkit-scrollbar-thumb { background: var(--thg-ui-border); }
+}

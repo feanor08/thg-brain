@@ -1,0 +1,100 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>THG editor palette isolation regression</title>
+<!-- Representative CM6 DOM and independently selected native light/dark palettes.
+     These are fixture colors, not redistributed upstream theme packages. Real
+     highlighted spans and selection layers exercise the browser CSS cascade. -->
+<style>
+body { margin: 0; }
+.cm-editor { position: relative; }
+.cm-light { background-color: #ffffff; color: #202020; }
+.cm-dark { background-color: #202020; color: #eeeeee; }
+.cm-light .tok-keyword { color: #650080; }
+.cm-light .tok-string { color: #006020; }
+.cm-light .tok-comment { color: #454545; }
+.cm-dark .tok-keyword { color: #e0a0ff; }
+.cm-dark .tok-string { color: #a0efb0; }
+.cm-dark .tok-comment { color: #c0c0c0; }
+.cm-light .cm-gutters { background-color: #f0f0f0; color: #404040; }
+.cm-dark .cm-gutters { background-color: #303030; color: #dddddd; }
+.cm-light .cm-activeLine, .cm-light .cm-activeLineGutter { background-color: #eeeeee; }
+.cm-dark .cm-activeLine, .cm-dark .cm-activeLineGutter { background-color: #303030; }
+.cm-light .cm-selectionBackground { background-color: #d0d0d0; }
+.cm-dark .cm-selectionBackground { background-color: #383838; }
+.cm-light.cm-focused .cm-selectionBackground { background-color: #c0d0e0; }
+.cm-dark.cm-focused .cm-selectionBackground { background-color: #304050; }
+.cm-light .cm-content ::selection { background-color: #c0d0e0; color: #202020; }
+.cm-dark .cm-content ::selection { background-color: #304050; color: #eeeeee; }
+.cm-light .cm-cursor { border-left: 1px solid #202020; }
+.cm-dark .cm-cursor { border-left: 1px solid #eeeeee; }
+.cm-selectionBackground { height: 30px; width: 240px; }
+</style>
+<style id="package">/*__PACKAGE_CSS__*/</style>
+<body class="desktop">
+<div id="editors"></div>
+<div class="thg-sublime-status">UTF-8 · LF · Spaces: 4</div>
+<pre id="result">PENDING</pre>
+<script>
+const schemes = /*__THEME_IDS__*/ [];
+for (const mode of ['light', 'dark']) {
+    const editor = document.createElement('div');
+    editor.className = `cm-editor cm-${mode}`;
+    editor.innerHTML = `<div class="cm-gutters"><div class="cm-activeLineGutter">1</div></div>
+      <div class="cm-scroller"><div class="cm-content" contenteditable="true">
+      <div class="cm-line cm-activeLine"><span class="tok-keyword">const</span> value = <span class="tok-string">"hello"</span>; <span class="tok-comment">// note</span></div>
+      </div><div class="cm-selectionLayer"><div class="cm-selectionBackground"></div></div>
+      <div class="cm-cursorLayer"><div class="cm-cursor"></div></div></div>`;
+    document.querySelector('#editors').append(editor);
+}
+const targets = ['.cm-content', '.tok-keyword', '.tok-string', '.tok-comment',
+    '.cm-gutters', '.cm-activeLineGutter', '.cm-activeLine', '.cm-selectionBackground', '.cm-cursor'];
+function snapshot(editor) {
+    return [editor, ...targets.map(s => editor.querySelector(s))].map(el => {
+        const s = getComputedStyle(el);
+        return [s.color, s.backgroundColor, s.borderLeftColor];
+    }).concat([['.tok-keyword', '.tok-string', '.tok-comment'].map(selector => {
+        const s = getComputedStyle(editor.querySelector(selector), '::selection');
+        return [s.color, s.backgroundColor];
+    })]);
+}
+function assert(value, message) { if (!value) throw new Error(message); }
+function lum(rgb) {
+    return rgb.match(/[\d.]+/g).slice(0, 3).map(v => Number(v) / 255)
+        .map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4)
+        .reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
+}
+function contrast(a, b) { const x = [lum(a), lum(b)].sort((a,b) => a-b); return (x[1]+.05)/(x[0]+.05); }
+try {
+    let cases = 0;
+    for (const focused of [false, true]) {
+        const editors = [...document.querySelectorAll('.cm-editor')];
+        editors.forEach(e => e.classList.toggle('cm-focused', focused));
+        document.documentElement.removeAttribute('data-thg-sublime');
+        const before = editors.map(snapshot);
+        for (const id of [...schemes, 'invalid-theme']) {
+            document.documentElement.dataset.thgSublime = id;
+            editors.forEach((editor, i) => {
+                assert(JSON.stringify(snapshot(editor)) === JSON.stringify(before[i]), `${id}: native ${i} colors changed (focused=${focused})`);
+                for (const token of editor.querySelectorAll('.tok-keyword, .tok-string, .tok-comment')) {
+                    for (const surface of [editor, editor.querySelector('.cm-activeLine'), editor.querySelector('.cm-selectionBackground')]) {
+                        assert(contrast(getComputedStyle(token).color, getComputedStyle(surface).backgroundColor) >= 4.5, `${id}: highlighted text contrast`);
+                    }
+                }
+                const font = getComputedStyle(editor.querySelector('.cm-scroller'));
+                assert(font.fontSize === '23px' && font.lineHeight === '30px', 'editor typography');
+                assert(font.fontFeatureSettings.includes('"liga"') && font.fontFeatureSettings.includes('"calt"'), 'ligatures');
+                cases++;
+            });
+        }
+    }
+    const hidden = innerWidth <= 900;
+    assert((getComputedStyle(document.querySelector('.thg-sublime-status')).display === 'none') === hidden, 'responsive status');
+    document.body.className = 'mobile';
+    assert(getComputedStyle(document.querySelector('.thg-sublime-status')).display === 'none', 'mobile status');
+    document.documentElement.removeAttribute('data-thg-sublime');
+    assert(getComputedStyle(document.querySelector('.cm-scroller')).fontSize !== '23px', 'disable typography');
+    document.querySelector('#result').textContent = `PASS ${cases} palette cases; width=${innerWidth}`;
+} catch (error) {
+    document.querySelector('#result').textContent = `FAIL ${error.message}`;
+}
+</script>
