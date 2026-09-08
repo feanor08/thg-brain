@@ -65,6 +65,7 @@ function lum(rgb) {
 }
 function contrast(a, b) { const x = [lum(a), lum(b)].sort((a,b) => a-b); return (x[1]+.05)/(x[0]+.05); }
 try {
+    assert(innerWidth === /*__WIDTH__*/ 0, 'requested viewport width');
     let cases = 0;
     for (const focused of [false, true]) {
         const editors = [...document.querySelectorAll('.cm-editor')];
@@ -97,4 +98,5 @@ try {
 } catch (error) {
     document.querySelector('#result').textContent = `FAIL ${error.message}`;
 }
+fetch('/result', {method: 'POST', body: document.querySelector('#result').textContent});
 </script>

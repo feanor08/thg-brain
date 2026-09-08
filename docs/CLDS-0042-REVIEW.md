@@ -6,13 +6,22 @@ Workspace branch: `clds/clds-0042`. Baseline HEAD: `2855595ae21524f2af0a271c2f35
 
 ## TEST evidence
 
+
+### Mac preflight correction (2026-09-08)
+
+The supplied failure records missing macOS browser discovery followed by a 30-second timeout with an explicit Chrome executable. The old runner searched Linux locations and coupled fixture evaluation to `--dump-dom` process exit. The exact internal reason for Mac Chrome's stall cannot be established from that timeout alone. The revised runner discovers standard macOS bundles, uses unified headless mode and receives an explicit loopback completion result independently of browser exit. It enforces a 45-second deadline and terminates/reaps only its disposable process group. A local trial also caught Chromium 120's legacy headless early exit; explicit `--headless=new` resolved it.
+
+`scripts/verify.sh` passed with 35 Python tests, JavaScript controller checks, deterministic ETAPI fixture rehearsal and syntax/whitespace checks. Real Chromium 120 on Linux passed 40 palette combinations at each of 1280px and 800px; the mutation must fail specifically for changed native palette colors. New tests exercise system/user Mac discovery, quoted executable paths, invalid overrides, successful callback while the browser stays alive, early exit, timeout, process reaping and profile removal. The restricted process sandbox initially refused loopback sockets; verification passed with the local process sandbox override. No Mac execution or production validation is claimed.
+
+Independent read-only REVIEW was requested again for this prospective revision. The collaboration service failed before spawning the reviewer with `no thread with id`. REVIEW remains pending/blocking; the implementation self-review below is not independent approval. No commit, PR or accepted artifact was produced.
+
 The previous CLDS TEST failed before running tests because `node` was absent from PATH. Earlier evidence used an explicit temporary `NODE_BIN`, which the standard invocation did not retain. Verification now resolves a supported PATH runtime or uses a checksum-pinned workspace-local archive cache. This restricted-network workspace was preseeded from the existing official ARM64 archive; no system installation or production action was performed. Reproduce with Python 3.9.2 and the verified Node v22.16.0 ARM64 runtime:
 
 ```sh
 scripts/verify.sh
 ```
 
-- 31 Python tests cover deterministic packaging/all nine schemes/default, contrast, typography/modules/mobile scope, supported note metadata, dry-run, idempotency, partial update recovery, conflict refusal, parent child/template/inheritable rejection, disable/re-enable preservation, exact-source gates, credential file protections, loopback/redirect/proxy constraints, request method/header/body contract, error redaction, baseline assets, syntax and live-plan structure. Runtime regressions cover explicit overrides, `nodejs` discovery, version/executable checks, archive checksums, restricted member extraction, corrupted offline cache and network failure without skipping tests.
+- 35 Python tests cover deterministic packaging/all nine schemes/default, contrast, typography/modules/mobile scope, supported note metadata, dry-run, idempotency, partial update recovery, conflict refusal, parent child/template/inheritable rejection, disable/re-enable preservation, exact-source gates, credential file protections, loopback/redirect/proxy constraints, request method/header/body contract, error redaction, baseline assets, syntax and live-plan structure. Runtime regressions cover explicit overrides, `nodejs` discovery, version/executable checks, archive checksums, restricted member extraction, corrupted offline cache and network failure without skipping tests.
 - Packaged JavaScript executed successfully in the dependency-free widget harness: all nine choices, default, invalid/prototype-like IDs, reload persistence, denied storage, cross-tab/clear events, literal text rendering, active kind updates, frozen note invariance and event cleanup.
 - Fixture first apply: 10 created notes, 29 operations. Identical second apply: 0 created notes, 0 operations. Disable: 9 attribute removals. Repeated disable: 0 operations. Re-enable preserves note identities/content.
 - Shell/JS/Python syntax checks and whitespace check passed. All eight original tracked files have unchanged Git blob hashes, including deployment and backup assets.
