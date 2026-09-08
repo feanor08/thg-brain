@@ -1,0 +1,16 @@
+@media (min-width: 901px) {
+    :root[data-thg-sublime] body.desktop .tree-wrapper .fancytree-node {
+        height: 26px !important;
+        padding: 1px 3px !important;
+        border-radius: 0 !important;
+        font-size: 13px;
+    }
+    :root[data-thg-sublime] body.desktop .tree-wrapper .ui-fancytree ul { padding-inline-start: 12px !important; }
+    :root[data-thg-sublime] body.desktop .tree-wrapper .fancytree-expander { opacity: 0.7; }
+    :root[data-thg-sublime] body.desktop .tree-wrapper .fancytree-custom-icon { opacity: 0.8; }
+    :root[data-thg-sublime] body.desktop .tree-wrapper .fancytree-active {
+        background: var(--thg-ui-selection) !important;
+        color: var(--thg-ui-text) !important;
+        box-shadow: inset 2px 0 var(--thg-ui-accent);
+    }
+}

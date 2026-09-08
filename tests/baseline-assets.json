@@ -1,0 +1,10 @@
+{
+  ".gitignore": "b861cf2b473ce0512954cddc82ef259744e695f3",
+  "REAME.md": "3e7c0e8ee0999820e41c32b06054f9e578962990",
+  "docker-compose.yml": "2a9074d4ecaea544b15d5c91d9bdf6d189652b4f",
+  "k8s/lore.yaml": "15d10474dea5c66a0d412175a1d91a1736cefdda",
+  "scripts/backup-lore.sh": "82df473446e5e6187f99379e449c61f5e3792197",
+  "scripts/thg-node-audit.sh": "1e78f0aed3ca05700d584476146933354c406f6b",
+  "systemd/lore-backup.service": "8eb56fab3fc7ef10138e9a78a3f0018b9c53cca8",
+  "systemd/lore-backup.timer": "bdc85b527aff4f5bdbc1907e10b80b6818798b8d"
+}

@@ -1,0 +1,194 @@
+{
+  "default": "thg-sublime",
+  "themes": [
+    {
+      "id": "materialize",
+      "name": "Materialize",
+      "ui": {
+        "bg": "#263238",
+        "panel": "#1e282d",
+        "text": "#eceff1",
+        "muted": "#b0bec5",
+        "border": "#52646d",
+        "selection": "#3e5360",
+        "accent": "#80cbc4"
+      },
+      "editor": {
+        "bg": "#263238",
+        "text": "#eceff1"
+      },
+      "syntax": {
+        "comment": "#b0bec5",
+        "keyword": "#80cbc4"
+      }
+    },
+    {
+      "id": "spacegray",
+      "name": "Spacegray",
+      "ui": {
+        "bg": "#2b303b",
+        "panel": "#232830",
+        "text": "#dfe4ed",
+        "muted": "#a7b1c2",
+        "border": "#566175",
+        "selection": "#414b5e",
+        "accent": "#8fa1b3"
+      },
+      "editor": {
+        "bg": "#2b303b",
+        "text": "#dfe4ed"
+      },
+      "syntax": {
+        "comment": "#a7b1c2",
+        "keyword": "#8fa1b3"
+      }
+    },
+    {
+      "id": "soda-dark",
+      "name": "Soda Dark",
+      "ui": {
+        "bg": "#272822",
+        "panel": "#20211c",
+        "text": "#f8f8f2",
+        "muted": "#b5b5aa",
+        "border": "#5f6055",
+        "selection": "#494a40",
+        "accent": "#a6e22e"
+      },
+      "editor": {
+        "bg": "#272822",
+        "text": "#f8f8f2"
+      },
+      "syntax": {
+        "comment": "#b5b5aa",
+        "keyword": "#a6e22e"
+      }
+    },
+    {
+      "id": "soda-light",
+      "name": "Soda Light",
+      "ui": {
+        "bg": "#fafafa",
+        "panel": "#ededed",
+        "text": "#252525",
+        "muted": "#555555",
+        "border": "#939393",
+        "selection": "#d4e3f1",
+        "accent": "#005b9a"
+      },
+      "editor": {
+        "bg": "#fafafa",
+        "text": "#252525"
+      },
+      "syntax": {
+        "comment": "#555555",
+        "keyword": "#005b9a"
+      }
+    },
+    {
+      "id": "guna",
+      "name": "Guna",
+      "ui": {
+        "bg": "#202b33",
+        "panel": "#182229",
+        "text": "#e4edf2",
+        "muted": "#a6bcc9",
+        "border": "#4d6575",
+        "selection": "#354d5d",
+        "accent": "#eab86b"
+      },
+      "editor": {
+        "bg": "#202b33",
+        "text": "#e4edf2"
+      },
+      "syntax": {
+        "comment": "#a6bcc9",
+        "keyword": "#eab86b"
+      }
+    },
+    {
+      "id": "mariana",
+      "name": "Mariana",
+      "ui": {
+        "bg": "#303841",
+        "panel": "#262d35",
+        "text": "#e0e6ed",
+        "muted": "#b0becd",
+        "border": "#5d6c7c",
+        "selection": "#465568",
+        "accent": "#79b7e8"
+      },
+      "editor": {
+        "bg": "#303841",
+        "text": "#e0e6ed"
+      },
+      "syntax": {
+        "comment": "#b0becd",
+        "keyword": "#79b7e8"
+      }
+    },
+    {
+      "id": "cyberpunk-umbra",
+      "name": "Cyberpunk Umbra",
+      "ui": {
+        "bg": "#171523",
+        "panel": "#100f19",
+        "text": "#eeeaf5",
+        "muted": "#bbb3ce",
+        "border": "#635878",
+        "selection": "#3b304e",
+        "accent": "#64f5e4"
+      },
+      "editor": {
+        "bg": "#171523",
+        "text": "#eeeaf5"
+      },
+      "syntax": {
+        "comment": "#bbb3ce",
+        "keyword": "#64f5e4"
+      }
+    },
+    {
+      "id": "cyberpunk-scarlet",
+      "name": "Cyberpunk Scarlet",
+      "ui": {
+        "bg": "#24171c",
+        "panel": "#1a1115",
+        "text": "#f6eaee",
+        "muted": "#c9b3bc",
+        "border": "#785460",
+        "selection": "#53303d",
+        "accent": "#ff758f"
+      },
+      "editor": {
+        "bg": "#24171c",
+        "text": "#f6eaee"
+      },
+      "syntax": {
+        "comment": "#c9b3bc",
+        "keyword": "#ff758f"
+      }
+    },
+    {
+      "id": "thg-sublime",
+      "name": "THG Sublime",
+      "ui": {
+        "bg": "#252830",
+        "panel": "#1d2027",
+        "text": "#e8e9ed",
+        "muted": "#b0b4c0",
+        "border": "#565d6e",
+        "selection": "#3c465b",
+        "accent": "#e6b66b"
+      },
+      "editor": {
+        "bg": "#252830",
+        "text": "#e8e9ed"
+      },
+      "syntax": {
+        "comment": "#b0b4c0",
+        "keyword": "#e6b66b"
+      }
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+.thg-sublime-status {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    padding: 2px 8px;
+    border-top: 1px solid var(--thg-ui-border, currentColor);
+    background: var(--thg-ui-panel, inherit);
+    color: var(--thg-ui-text, inherit);
+    font: 12px/22px var(--thg-font, monospace);
+}
+.thg-sublime-status select {
+    max-width: 45%;
+    min-width: 0;
+    border: 1px solid var(--thg-ui-border, currentColor);
+    border-radius: 0;
+    padding: 0 4px;
+    background: var(--thg-ui-bg, inherit);
+    color: var(--thg-ui-text, inherit);
+    font: inherit;
+}
+.thg-sublime-status select:focus-visible { outline: 2px solid var(--thg-ui-accent); outline-offset: 1px; }
+body.mobile .thg-sublime-status { display: none !important; }
+@media (max-width: 900px) {
+    .thg-sublime-status { display: none !important; }
+}
+@media print {
+    .thg-sublime-status { display: none !important; }
+}

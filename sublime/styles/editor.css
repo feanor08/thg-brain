@@ -1,0 +1,16 @@
+/* Phase 1 surface/typography only. Token-specific syntax rules belong to Phase 4. */
+:root[data-thg-sublime] :is(.cm-editor, .cm-scroller, .ck-content, .note-detail-code pre) {
+    font-family: var(--thg-font) !important;
+    font-size: var(--thg-editor-size) !important;
+    line-height: var(--thg-editor-line) !important;
+    font-variant-ligatures: contextual common-ligatures;
+    font-feature-settings: "liga" 1, "calt" 1;
+}
+/* Keep CodeMirror's complete native palette together: background, syntax spans,
+   selections, active lines, gutters and caret. Native editor theme selection is
+   independent of the THG UI scheme. Partial recoloring breaks light/dark contrast.
+   The editor/syntax tokens are reserved for a future complete CM mapping. */
+:root[data-thg-sublime] .ck-content {
+    background-color: var(--thg-editor-bg) !important;
+    color: var(--thg-editor-text) !important;
+}

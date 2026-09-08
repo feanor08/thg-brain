@@ -1,0 +1,18 @@
+/* Native tab positioning, widths, drag handles and mini-tab rules remain authoritative. */
+@media (min-width: 901px) {
+    :root[data-thg-sublime] body.desktop .tab-row-widget .note-tab-wrapper {
+        border-radius: 0 !important;
+        height: 30px !important;
+        padding-block: 3px !important;
+        font-size: 13px;
+        background-color: var(--thg-ui-panel) !important;
+        color: var(--thg-ui-muted) !important;
+    }
+    :root[data-thg-sublime] body.desktop .tab-row-widget .note-tab[active] .note-tab-wrapper {
+        background-color: var(--thg-ui-bg) !important;
+        color: var(--thg-ui-text) !important;
+        box-shadow: inset 0 2px var(--thg-ui-accent);
+    }
+    :root[data-thg-sublime] body.desktop .note-tab-close { opacity: 0.6; border-radius: 0 !important; }
+    :root[data-thg-sublime] body.desktop .note-tab-close:hover { opacity: 1; }
+}
