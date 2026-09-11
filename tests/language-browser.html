@@ -1,0 +1,75 @@
+<!doctype html><meta charset="utf-8"><style>body { margin: 0; } /*__CSS__*/</style>
+<body class="desktop"><script>
+// Small jQuery adapter uses real elements, native selects and browser event dispatch.
+class Query {
+ constructor(html) { const t = document.createElement('template'); t.innerHTML = html; this.el = t.content.firstChild; this.events = new Map(); }
+ text(v) { this.el.textContent = v; return this; }
+ val(v) { if (!arguments.length) return this.el.value; this.el.value = v; return this; }
+ prop(k,v) { this.el[k] = v; return this; }
+ append(...v) { this.el.append(...v.map(q => q.el)); return this; }
+ on(k,fn) { this.events.set(k,fn); this.el.addEventListener(k,fn); return this; }
+ off(k) { this.el.removeEventListener(k,this.events.get(k)); return this; }
+}
+const $ = html => new Query(html);
+let content = 'import os\ndef main():\n    print(os.getcwd())';
+const original = content, labels = new Map();
+const note = Object.freeze({noteId:'example', type:'code', mime:'text/plain',
+ getContent: async () => content, getOwnedLabelValue: k => labels.get(k)});
+const backend = Object.freeze({type:'code', getOwnedLabelValue: k => labels.get(k),
+ removeLabel: k => labels.delete(k), setLabel: (k,v) => labels.set(k,v)});
+const api = { NoteContextAwareWidget: class { contentSized() {} cleanup() {} },
+ runOnBackend: async (fn,args) => Function('api','args','return (' + fn.toString() + ')(...args)')({getNote:()=>backend},args),
+ reloadNotes: async () => {}, getNote: async () => note };
+const module = {exports:{}};
+/*__CONTROLLER__*/
+(async () => {
+ const assert = (v,m) => {if(!v) throw Error(m);};
+ const widget = module.exports; widget.note = note; document.body.append(widget.doRender().el);
+ await widget.refreshWithNote(note);
+ assert(widget.$language.el.textContent.includes('Python'), 'auto detection');
+ assert(widget.$picker.el.options.length === 9, 'nine themes');
+ widget.$picker.val('mariana').el.dispatchEvent(new Event('change'));
+ assert(localStorage.getItem(THG_STORAGE) === 'mariana', 'theme persistence');
+ widget.$languagePicker.val('rust').el.dispatchEvent(new Event('change'));
+ // Allow the async backend bridge and refresh chain to settle.
+ for(let i=0; i<12; i++) await Promise.resolve();
+ assert(labels.get('thgSublimeLanguage') === 'rust', 'native select saves lock');
+ assert(widget.$language.el.textContent === 'Rust · Locked', 'lock status');
+ content = 'package main\nfunc main() { fmt.Println(42) }';
+ await widget.refreshWithNote(note);
+ assert(widget.$language.el.textContent === 'Rust · Locked', 'refresh preserves lock');
+ widget.$languagePicker.val('').el.dispatchEvent(new Event('change'));
+ for(let i=0; i<12; i++) await Promise.resolve();
+ assert(widget.$language.el.textContent.includes('Go'), 'clear restores auto');
+ labels.set('thgSublimeLanguage', 'obsolete-language');
+ await widget.refreshWithNote(note);
+ assert(widget.$languagePicker.el.value === 'invalid-lock', 'invalid lock has distinct selection');
+ assert(widget.$languagePicker.el.selectedOptions[0].disabled, 'invalid placeholder cannot be chosen');
+ widget.$languagePicker.el.focus();
+ widget.$languagePicker.el.value = '';
+ widget.$languagePicker.el.dispatchEvent(new Event('change', {bubbles:true}));
+ for(let i=0; i<12; i++) await Promise.resolve();
+ assert(!labels.has('thgSublimeLanguage'), 'selector clears invalid durable lock');
+ assert(widget.$language.el.textContent.includes('Go'), 'invalid clear restores detection');
+ assert(content === 'package main\nfunc main() { fmt.Println(42) }' && note.mime === 'text/plain', 'no text or MIME writes');
+ assert(localStorage.getItem(THG_STORAGE) === 'mariana', 'independent theme');
+ content = '';
+ for(let i=0; i<5; i++) {
+  await widget.refreshWithNote(note);
+  assert(widget.$language.el.textContent === 'Plain Text / Unknown · 0% · Unlocked', 'deleted content resets evidence');
+ }
+ assert(widget.$widget.el.textContent.includes('UTF-8 · LF · Spaces: 4'), 'informational fields');
+ const hidden = innerWidth <= 900;
+ assert((getComputedStyle(widget.$widget.el).display === 'none') === hidden, 'narrow fallback');
+ assert(document.documentElement.scrollWidth <= innerWidth, 'no horizontal overflow');
+ if(!hidden) for(const control of [widget.$picker.el,widget.$languagePicker.el]) {
+   control.focus(); assert(document.activeElement === control, 'keyboard focus');
+   const r = control.getBoundingClientRect(); assert(r.width > 40 && r.right <= innerWidth, 'visible control');
+ }
+ document.body.className='mobile';
+ assert(getComputedStyle(widget.$widget.el).display === 'none', 'mobile fallback');
+ widget.cleanup();
+ assert(!document.documentElement.hasAttribute('data-thg-sublime'), 'cleanup');
+ await fetch('/result',{method:'POST',body:'PASS language controls'});
+})().catch(e=>fetch('/result',{method:'POST',body:'FAIL '+e.message}));
+</script>

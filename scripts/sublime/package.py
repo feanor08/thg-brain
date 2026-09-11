@@ -50,7 +50,7 @@ def package():
                           content=(ROOT / f"sublime/styles/{name}.css").read_text(), activation="appCss"))
     notes.append(dict(key="themes", title="THG Sublime / themes", type="code", mime="text/css",
                       content=theme_css(data), activation="appCss"))
-    controller = (ROOT / "sublime/controller.js").read_text().replace(
+    controller = ((ROOT / "sublime/language.js").read_text() + "\n" + (ROOT / "sublime/controller.js").read_text()).replace(
         "/*__THG_THEMES__*/ []", json.dumps([dict(id=t["id"], name=t["name"]) for t in data["themes"]]))
     notes.append(dict(key="controller", title="THG Sublime / status and themes", type="code",
                       mime="application/javascript;env=frontend", content=controller, activation="widget"))

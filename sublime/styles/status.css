@@ -29,3 +29,6 @@ body.mobile .thg-sublime-status { display: none !important; }
 @media print {
     .thg-sublime-status { display: none !important; }
 }
+/* Allow desktop metadata to wrap before it can crowd either selector. */
+.thg-sublime-status { flex-wrap: wrap; }
+.thg-sublime-status > span { overflow-wrap: anywhere; }

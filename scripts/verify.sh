@@ -19,9 +19,11 @@ sys.path.insert(0, 'scripts/sublime')
 from package import package
 Path(sys.argv[1]).write_text(json.dumps(package()))
 PY
+"$node_bin" --check sublime/language.js
+"$node_bin" tests/language.test.cjs
 "$node_bin" --check sublime/controller.js
 "$node_bin" --check tests/controller.test.cjs
 "$node_bin" tests/controller.test.cjs "$verify_tmp/package.json"
 scripts/thg-sublime.sh apply --fixture
 git diff --check
-echo 'THG Sublime Phase 1 local verification passed; live/browser acceptance remains pending.'
+echo 'THG Sublime Phase 2 local verification passed; live/browser acceptance remains pending.'

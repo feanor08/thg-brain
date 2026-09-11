@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -17,6 +18,7 @@ from fixture import Fixture
 from package import MODULES, MARKER, OWNER, THEME_IDS, package, stable_id, theme_data, theme_css
 from reconcile import plan, execute
 from cli import approved_source
+from runtime import resolve
 
 
 class Reconciliation(unittest.TestCase):
@@ -53,12 +55,43 @@ class Reconciliation(unittest.TestCase):
         self.assertEqual(len(plan(self.api, "fixtureParent", "apply")), 29)
         self.assertEqual(self.api.writes, [])
 
+    def test_managed_lock_attempts_allow_update_and_disable(self):
+        self.apply()
+        before = deepcopy(self.api.notes)
+        with tempfile.TemporaryDirectory() as directory:
+            packaged = Path(directory) / 'package.json'
+            deployed = Path(directory) / 'deployed.json'
+            packaged.write_text(json.dumps(package()))
+            deployed.write_text(json.dumps(self.api.notes))
+            subprocess.run([resolve(), 'tests/controller.test.cjs', str(packaged), str(deployed)],
+                           cwd=ROOT, check=True, capture_output=True, text=True, timeout=30)
+            self.api.notes = json.loads(deployed.read_text())
+        self.assertEqual(self.api.notes, before)
+        self.api.notes[stable_id('controller')]['content'] = '/* previous release */'
+        self.assertEqual(self.apply()['created'], 0)
+        self.assertEqual(self.apply()['operations'], 0)
+        execute(self.api, plan(self.api, 'fixtureParent', 'disable'))
+        self.assertEqual(plan(self.api, 'fixtureParent', 'disable'), [])
+        self.assertEqual(self.api.notes['fixtureParent'], before['fixtureParent'])
+
     def test_update_only_owned_content(self):
         self.apply()
         self.api.notes[stable_id("editor")]["content"] = "/* previous release */"
         self.assertEqual(self.apply()["created"], 0)
         self.assertEqual(self.apply()["operations"], 0)
         self.assertFalse(any(method == "DELETE" and path.startswith("/notes") for method, path, _ in self.api.writes))
+
+    def test_phase1_module_upgrade_keeps_ids_and_knowledge(self):
+        self.apply()
+        for key in ("controller", "status"):
+            self.api.notes[stable_id(key)]["content"] = "/* Phase 1 module */"
+        ids = set(self.api.notes)
+        knowledge = deepcopy(self.api.notes["fixtureParent"])
+        self.assertEqual(self.apply()["created"], 0)
+        self.assertEqual(set(self.api.notes), ids)
+        self.assertEqual(self.api.notes["fixtureParent"], knowledge)
+        self.assertEqual(self.apply()["operations"], 0)
+        self.assertIn("thgDetect", self.api.notes[stable_id("controller")]["content"])
 
     def test_foreign_marker_anywhere_refused(self):
         self.api.notes["unrelated"] = dict(noteId="unrelated", attributes=[dict(name=MARKER, value=OWNER)])
