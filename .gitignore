@@ -11,3 +11,6 @@ backups/
 .DS_Store
 *.log
 *.bak
+# Python bytecode
+__pycache__/
+*.py[cod]
