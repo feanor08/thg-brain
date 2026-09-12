@@ -32,6 +32,8 @@ for (const [id, content] of Object.entries(corpus)) {
 for (const content of ['', 'x', 'return true;', '{}', '[]', '{"x":1}', 'echo hello world',
  'We select products from suppliers where possible.', '# Heading only without other markup',
  '# import os\n# def main():\n#     print(42)',
+ '#!/bin/bash\n# Heading\n# Read the [guide](https://example.org)',
+ '#!/usr/bin/env python3\n# Heading\n# Read the [guide](https://example.org)',
  '/* # Heading\n- [link](somewhere) */',
  '// const value = () => console.log(42);', '/* package main\nfunc main() { fmt.Println(42) } */',
  '-- SELECT name FROM users WHERE id = 1;',
@@ -56,7 +58,8 @@ state = context.advance(state, '');
 assert.equal(state.current.id, 'plain');
 state = context.advance(state, ' ');
 assert.equal(state.current.id, 'plain');
-for (const empty of ['', ' \n\t ']) {
+for (const empty of ['', ' \n\t ', 'x', 'return true;', '# Just a heading',
+ '#!/bin/bash\n# Heading\n# Read the [guide](https://example.org)', corpus.python + '\n' + corpus.go]) {
  let deleted = context.advance(null, corpus.python);
  for (let refresh = 0; refresh < 5; refresh++) {
   deleted = context.advance(deleted, empty);
@@ -65,6 +68,7 @@ for (const empty of ['', ' \n\t ']) {
   assert.equal(deleted.pending, null);
   assert.equal(deleted.repeats, 0);
  }
+ assert.equal(context.advance(null, empty).current.id, 'plain'); // fresh session/reopen
 }
 assert.equal(context.detect('x'.repeat(1000000)).id, 'plain');
 console.log('Language corpus, ambiguity, bounded deterministic scores and hysteresis passed.');

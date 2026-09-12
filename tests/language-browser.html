@@ -14,16 +14,21 @@ const $ = html => new Query(html);
 let content = 'import os\ndef main():\n    print(os.getcwd())';
 const original = content, labels = new Map();
 const note = Object.freeze({noteId:'example', type:'code', mime:'text/plain',
- getContent: async () => content, getOwnedLabelValue: k => labels.get(k)});
-const backend = Object.freeze({type:'code', getOwnedLabelValue: k => labels.get(k),
- removeLabel: k => labels.delete(k), setLabel: (k,v) => labels.set(k,v)});
+ getContent: async () => content, getOwnedLabelValue: k => labels.get(k),
+ getOwnedLabels: k => labels.has(k) ? [{attributeId:"lock-id", value:labels.get(k), isInheritable:false}] : []});
+window.glob = {baseApiUrl: '/lore/api/', csrfToken: 'FIXTURE_CSRF'};
 const api = { NoteContextAwareWidget: class { contentSized() {} cleanup() {} },
- runOnBackend: async (fn,args) => Function('api','args','return (' + fn.toString() + ')(...args)')({getNote:()=>backend},args),
- reloadNotes: async () => {}, getNote: async () => note };
+ runOnBackend: async () => {throw Error('Backend scripting disabled');},
+ reloadNotes: async () => {
+  const response = await fetch('/lore/api/fixture-labels');
+  const durable = await response.json(); labels.clear();
+  for (const [k,v] of Object.entries(durable)) labels.set(k,v);
+ }, getNote: async () => note };
 const module = {exports:{}};
 /*__CONTROLLER__*/
 (async () => {
  const assert = (v,m) => {if(!v) throw Error(m);};
+ const settle = async () => { for(let i=0; widget.lockBusy && i<200; i++) await new Promise(r=>setTimeout(r,10)); assert(!widget.lockBusy, 'lock request completed'); };
  const widget = module.exports; widget.note = note; document.body.append(widget.doRender().el);
  await widget.refreshWithNote(note);
  assert(widget.$language.el.textContent.includes('Python'), 'auto detection');
@@ -31,24 +36,30 @@ const module = {exports:{}};
  widget.$picker.val('mariana').el.dispatchEvent(new Event('change'));
  assert(localStorage.getItem(THG_STORAGE) === 'mariana', 'theme persistence');
  widget.$languagePicker.val('rust').el.dispatchEvent(new Event('change'));
- // Allow the async backend bridge and refresh chain to settle.
- for(let i=0; i<12; i++) await Promise.resolve();
+ // Allow the async native request and refresh chain to settle.
+ await settle();
  assert(labels.get('thgSublimeLanguage') === 'rust', 'native select saves lock');
  assert(widget.$language.el.textContent === 'Rust · Locked', 'lock status');
  content = 'package main\nfunc main() { fmt.Println(42) }';
  await widget.refreshWithNote(note);
  assert(widget.$language.el.textContent === 'Rust · Locked', 'refresh preserves lock');
+ labels.clear(); await api.reloadNotes(['example']);
+ const reopened = new ThgSublimeStatus(); reopened.note = note; reopened.doRender();
+ await reopened.refreshWithNote(note);
+ assert(reopened.$language.el.textContent === 'Rust · Locked', 'durable reopen with fresh cache');
+ reopened.cleanup(); widget.applyTheme('mariana', false);
  widget.$languagePicker.val('').el.dispatchEvent(new Event('change'));
- for(let i=0; i<12; i++) await Promise.resolve();
+ await settle();
  assert(widget.$language.el.textContent.includes('Go'), 'clear restores auto');
- labels.set('thgSublimeLanguage', 'obsolete-language');
+ await thgWriteAttribute('example', null, 'obsolete-language');
+ await api.reloadNotes(['example']);
  await widget.refreshWithNote(note);
  assert(widget.$languagePicker.el.value === 'invalid-lock', 'invalid lock has distinct selection');
  assert(widget.$languagePicker.el.selectedOptions[0].disabled, 'invalid placeholder cannot be chosen');
  widget.$languagePicker.el.focus();
  widget.$languagePicker.el.value = '';
  widget.$languagePicker.el.dispatchEvent(new Event('change', {bubbles:true}));
- for(let i=0; i<12; i++) await Promise.resolve();
+ await settle();
  assert(!labels.has('thgSublimeLanguage'), 'selector clears invalid durable lock');
  assert(widget.$language.el.textContent.includes('Go'), 'invalid clear restores detection');
  assert(content === 'package main\nfunc main() { fmt.Println(42) }' && note.mime === 'text/plain', 'no text or MIME writes');

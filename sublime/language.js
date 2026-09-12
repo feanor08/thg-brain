@@ -30,12 +30,14 @@ const THG_RULES = {
     dockerfile: [/^FROM [\w./:-]+/m, /^RUN \S/m, /^(?:COPY|WORKDIR|ENTRYPOINT|CMD|EXPOSE) \S/m]
 };
 function thgRank(raw) {
+    // A script shebang establishes hash-comment context, including Markdown-like comments.
+    const scriptContext = /^#!/.test(raw.trimStart());
     // Ignore comment-only grammar. Preserve shebangs, preprocessor directives and Markdown headings.
     const markup = raw.replace(/<!--[\s\S]*?(?:-->|$)/g, '')
         .replace(/\/\*[\s\S]*?(?:\*\/|$)/g, '').replace(/^\s*(?:\/\/|--).*$/gm, '');
     const text = markup.replace(/^\s*#(?!!|include\b).*$/gm, '');
     return Object.entries(THG_RULES).map(([id, rules]) => {
-        const count = rules.reduce((n, rule) => n + Number(rule.test(id === 'markdown' ? markup : text)), 0);
+        const count = rules.reduce((n, rule) => n + Number(rule.test(id === 'markdown' && !scriptContext ? markup : text)), 0);
         return { id, count, confidence: count >= 2 ? Math.min(96, 60 + count * 10) : 0 };
     }).sort((a, b) => b.confidence - a.confidence);
 }
@@ -56,8 +58,9 @@ function thgDetect(content, title = '') {
 }
 function thgAdvance(state, content, title) {
     const candidate = thgDetect(content, title);
-    // Absence of content invalidates all prior evidence, even on unchanged refreshes.
-    if (typeof content !== 'string' || !content.trim())
+    // Insufficient/ambiguous current evidence invalidates stale confidence immediately.
+    // Do this before the unchanged-refresh guard: rereading cannot revive old evidence.
+    if (candidate.id === 'plain')
         return { current: candidate, pending: null, repeats: 0, content };
     if (!state || state.current.id === candidate.id) return { current: candidate, pending: null, repeats: 0, content };
     if (content === state.content) return state; // Refresh is not new evidence.
@@ -65,7 +68,7 @@ function thgAdvance(state, content, title) {
     const bounded = typeof content === 'string' ? content.slice(0, 32768) : '';
     const incumbent = thgRank(bounded.split('\n').some(line => line.length > 1024) ? '' : bounded)
         .find(result => result.id === state.current.id)?.confidence || 0;
-    if (repeats >= 2 && (candidate.id === 'plain' || candidate.confidence >= incumbent + 15))
+    if (repeats >= 2 && candidate.confidence >= incumbent + 15)
         return { current: candidate, pending: null, repeats: 0, content };
     return { ...state, pending: candidate.id, repeats, content };
 }

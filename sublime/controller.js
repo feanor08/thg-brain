@@ -12,6 +12,32 @@ function thgManagedNote(note) {
     return note?.getOwnedLabelValue?.('thgSublimeOwner') != null;
 }
 
+// Pinned v0.104.1 native frontend attribute routes (not ETAPI or scripting).
+// Only explicit lock actions call this transport; the detector never does.
+async function thgWriteAttribute(noteId, attributeId, language) {
+    const config = window.glob;
+    const base = new URL(config?.baseApiUrl, document.baseURI);
+    if (!config?.baseApiUrl || !config.csrfToken ||
+        base.origin !== window.location.origin || !/^https?:$/.test(base.protocol) ||
+        base.username || base.password || base.search || base.hash || !base.pathname.endsWith('/api/'))
+        throw new Error('Unsupported frontend transport');
+    if (!/^[a-zA-Z0-9_-]+$/.test(noteId) ||
+        (attributeId !== null && !/^[a-zA-Z0-9_-]+$/.test(attributeId)))
+        throw new Error('Invalid metadata identifier');
+    const path = `notes/${noteId}/` + (attributeId === null ? 'set-attribute' : `attributes/${attributeId}`);
+    const response = await fetch(new URL(path, base).href, {
+        method: attributeId === null ? 'PUT' : 'DELETE',
+        credentials: 'same-origin', mode: 'same-origin', redirect: 'error', cache: 'no-store',
+        signal: AbortSignal.timeout(10000),
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': config.csrfToken },
+        ...(attributeId === null ? { body: JSON.stringify({
+            type: 'label', name: 'thgSublimeLanguage', value: language, isInheritable: false
+        }) } : {})
+    });
+    // Do not consume/log error bodies or retry writes with an uncertain outcome.
+    if (!response.ok) throw new Error('Attribute request failed');
+}
+
 class ThgSublimeStatus extends api.NoteContextAwareWidget {
     get parentWidget() { return "center-pane"; }
     get position() { return 10000; }
@@ -110,23 +136,33 @@ class ThgSublimeStatus extends api.NoteContextAwareWidget {
         if (this.lockBusy || !note || note.type !== 'code' || note.isProtected || thgManagedNote(note) ||
             (id && !THG_LANGUAGES.some(l => l[0] === id))) return;
         this.lockBusy = true;
+        this.generation = (this.generation || 0) + 1;
         this.$languagePicker.prop('disabled', true);
         try {
-            // Public frontend bridge to transactional BNote label methods. No content/type/MIME writes.
-            await api.runOnBackend((noteId, language) => {
-                const target = api.getNote(noteId);
-                if (!target || target.type !== 'code' || target.isProtected ||
-                    target.getOwnedLabelValue('thgSublimeOwner') != null) throw new Error('Unsupported note');
-                const name = 'thgSublimeLanguage';
-                target.removeLabel(name);
-                if (language) target.setLabel(name, language);
-            }, [note.noteId, id]);
+            // Refresh before writing: api.getNote alone can return stale cached metadata.
+            await api.reloadNotes([note.noteId]);
+            const target = await api.getNote(note.noteId);
+            if (this.disposed || !target || target.type !== 'code' || target.isProtected || thgManagedNote(target))
+                throw new Error('Unsupported note');
+            const locks = target.getOwnedLabels('thgSublimeLanguage');
+            if (id) {
+                // Native set-attribute updates one existing value, not its inheritance.
+                // Malformed/duplicate labels must be explicitly cleared first.
+                if (locks.length > 1 || locks.some(attr => attr.isInheritable))
+                    throw new Error('Clear malformed lock first');
+                await thgWriteAttribute(note.noteId, null, id);
+            } else {
+                for (const attr of locks) {
+                    if (this.disposed) throw new Error('Disposed');
+                    await thgWriteAttribute(note.noteId, attr.attributeId, '');
+                }
+            }
             await api.reloadNotes([note.noteId]);
             this.states.delete(note.noteId);
             if (!this.disposed && this.activeNote?.noteId === note.noteId) await this.refreshWithNote(await api.getNote(note.noteId));
         } catch (_) {
             if (!this.disposed && this.activeNote?.noteId === note.noteId)
-                this.$language.text('Language lock not saved — check scripting/access');
+                this.$language.text('Language lock not confirmed — reload or clear and retry');
         } finally {
             this.lockBusy = false;
             if (!this.disposed) this.$languagePicker.prop('disabled',

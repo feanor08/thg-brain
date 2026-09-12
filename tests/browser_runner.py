@@ -56,7 +56,7 @@ def stop_browser(process):
     process.wait(timeout=3)
 
 
-def render(html, width, timeout=45):
+def render(html, width, timeout=45, api_handler=None):
     browser = resolve_browser()
     outcome = []
 
@@ -68,7 +68,15 @@ def render(html, width, timeout=45):
         def log_message(self, *args):
             pass
 
+        def do_PUT(self):
+            if not api_handler or not api_handler(self):
+                self.send_error(404)
+
+        do_DELETE = do_PUT
+
         def do_GET(self):
+            if api_handler and api_handler(self):
+                return
             if self.path != '/fixture':
                 self.send_error(404)
                 return
