@@ -1,6 +1,6 @@
 # CLDS-0047 — local implementation and review evidence
 
-Intake HEAD matched `255b3d5a69cbbb520efbc8d610ce8ca03f32ae10`, with the prior implementation already present as uncommitted workspace changes. Accepted Phase 2 is the supplied production baseline. This work remains uncommitted local CODE/TEST. Independent GitHub-direct review of an exact pushed artifact, approval, private operator action, Inspector verification and human browser acceptance remain pending. No deployment, commit, push, container use or secret persistence was performed.
+Intake HEAD matched `255b3d5a69cbbb520efbc8d610ce8ca03f32ae10`. Accepted Phase 2 is the supplied production baseline. CLDS-0047 implementation and canonical verification were performed in the isolated feature worktree, then the exact tested source was committed and pushed for independent GitHub-direct review. Approval, private operator action, Inspector verification and human browser acceptance remain pending. No production deployment, container use or secret persistence was performed.
 
 ## Immutable native contract inspected before implementation
 

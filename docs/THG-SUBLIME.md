@@ -1,6 +1,6 @@
 # THG Sublime for Trilium — CLDS-0047
 
-Phase 1 is live and accepted per the CLDS-0045 intake. It provides Sublime-inspired typography, desktop density, nine schemes and a bottom theme/status widget using Trilium v0.104.1 supported customization. **Phase 2 is accepted per the CLDS-0047 intake. CLDS-0047 is local CODE/TEST only; independent review and production acceptance remain pending. Other phase work remains open.** Scheme names describe original, variable-driven approximations; this package does not redistribute upstream theme packages or fonts.
+Phase 1 is live and accepted per the CLDS-0045 intake. It provides Sublime-inspired typography, desktop density, nine schemes and a bottom theme/status widget using Trilium v0.104.1 supported customization. **Phase 2 is accepted per the CLDS-0047 intake. CLDS-0047 implements clearer Auto/Manual language UX and native syntax-highlighting synchronization; production acceptance remains pending. Other phase work remains open.** Scheme names describe original, variable-driven approximations; this package does not redistribute upstream theme packages or fonts.
 
 Run local verification with Python 3.9+, Node 18+ and Chromium (no npm packages):
 
