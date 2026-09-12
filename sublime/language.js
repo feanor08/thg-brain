@@ -1,5 +1,5 @@
 /* Deterministic evidence scores, not probabilities. No I/O or content writes. */
-// Reference MIME catalogue from v0.104.1 mime_type.ts; never applied to user notes.
+// Reviewed v0.104.1 native Code MIME catalogue; see CLDS-0047-REVIEW.md.
 const THG_LANGUAGES = [
     ['plain', 'Plain Text / Unknown', 'text/plain'], ['python', 'Python', 'text/x-python'],
     ['javascript', 'JavaScript', 'text/javascript'], ['typescript', 'TypeScript', 'application/typescript'],

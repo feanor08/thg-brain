@@ -1,0 +1,22 @@
+{
+  "commit": "744646d07bff459d1db305b1c0a8ea0c99b9c27c",
+  "files": {
+    "apps/client/src/services/note_types.ts": "c80609f05b0f5c828a8669664daeb86d537621cbfda0b129a14009cbaccd4c8c",
+    "apps/client/src/widgets/type_widgets/code/Code.tsx": "30dd4f1d130c3a281b3fc2e455fbe3348ee2e786d9d99bfc01f4278dc2c4ec79",
+    "packages/trilium-core/src/routes/index.ts": "9fae68088a5f2b5145f8d049047323ecc749d072ec085ebe4427f8629dded3dc",
+    "apps/client/src/widgets/note_types.tsx": "2e02c2c3942e07aa53ca3a9a507b64043e7148034d9e819ce2ea584fbcc308d8",
+    "packages/commons/src/lib/mime_type.ts": "9851f4ca7834ce0413913ac51df008329d1ab858dc4a23e7249e545f183ff0f1",
+    "apps/client/src/services/server.ts": "c8ac3fa6dde04c45a9c820aaae55744f1468811a0747d3021b7ac4f6b0265462",
+    "apps/client/src/entities/fnote.ts": "b50503c005c72d9d27375510d600fe2b375dba8001b7d11e83a125e069e77319",
+    "apps/client/src/widgets/dialogs/note_type_chooser.tsx": "a60e79184e668252016ff493e0ee8105d93ba7066d5333e7b249c4dedcaf593a",
+    "apps/client/src/widgets/ribbon/BasicPropertiesTab.tsx": "9e1228f2e39f76ba547d01ffc0adeb0c0626d59788c4c60fbde665a7d143bd69",
+    "apps/client/src/widgets/type_widgets/code/CodeMirror.tsx": "ef7f5538c23bbdd82d8c858d6cfafceb22eb55d1cf4947be98c425c8a65465fd",
+    "apps/client/src/services/mime_types.ts": "29d52215b9279960254277e0b13b7fe743a8a03700dd5a40f6706359fd6649af",
+    "packages/trilium-core/src/routes/api/notes.ts": "2c32a61bcd252d21c288c362fbc54478a81082f4f2d208bf58dbaf9659145a35",
+    "apps/client/src/services/frontend_script_api.ts": "bd7d998525a54a3e87aab0b366892dad53b9e87755f53b8cd0e44cfcbaf24e1c",
+    "apps/server/src/routes/route_api.ts": "b2ec976e8be50b477d683fe4b951f20e53ef8d37e95e33d238a3eab213c0305a",
+    "packages/trilium-core/src/becca/entities/bnote.ts": "0eb3ea0d744d041629719de31f96ed73375bab771efda4787833318addec5948",
+    "apps/client/src/services/froca.ts": "1325193d3cb6b3425628b687b851401c266876e56169956e0b3935f91365f680",
+    "packages/trilium-core/src/routes/api/attributes.ts": "1a65aa4dabb9767f7f1d33188978039604e1bc4f9ae7a5d550a349d3c05c86eb"
+  }
+}

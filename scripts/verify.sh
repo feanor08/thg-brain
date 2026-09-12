@@ -23,7 +23,9 @@ PY
 "$node_bin" tests/language.test.cjs
 "$node_bin" --check sublime/controller.js
 "$node_bin" --check tests/controller.test.cjs
+"$node_bin" --check tests/chromium_keys.cjs
+"$node_bin" --check tests/fixtures/trilium-0.104.1-type.cjs
 "$node_bin" tests/controller.test.cjs "$verify_tmp/package.json"
 scripts/thg-sublime.sh apply --fixture
 git diff --check
-echo 'THG Sublime Phase 2 local verification passed; live/browser acceptance remains pending.'
+echo 'THG Sublime CLDS-0047 local verification passed; live/browser acceptance remains pending.'

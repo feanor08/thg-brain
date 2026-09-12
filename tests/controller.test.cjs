@@ -9,14 +9,14 @@ const expected = ['materialize', 'spacegray', 'soda-dark', 'soda-light', 'guna',
     'cyberpunk-umbra', 'cyberpunk-scarlet', 'thg-sublime'];
 const storageKey = 'thg.sublime.phase1.theme.v1';
 
-function harness(saved, denied = false) {
+function harness(saved, denied = false, sessionStore = new Map()) {
     const store = new Map(saved === undefined ? [] : [[storageKey, saved]]);
     const attrs = new Map();
     const listeners = new Map();
     class Element {
         constructor(html) { this.html = html; this.children = []; this.handlers = new Map(); }
         prop(key, value) { this[key] = value; return this; }
-        text(value) { this.textContent = value; return this; }
+        text(value) { if (!arguments.length) return this.textContent; this.textContent = value; return this; }
         val(value) { if (arguments.length) { this.value = value; return this; } return this.value; }
         append(...children) { this.children.push(...children); return this; }
         on(event, cb) { this.handlers.set(event, cb); return this; }
@@ -29,6 +29,7 @@ function harness(saved, denied = false) {
     const window = {
         location: { origin: "https://fixture.invalid" },
         glob: { baseApiUrl: "/lore/api/", csrfToken: "FIXTURE_CSRF" },
+        sessionStorage: { getItem: key => sessionStore.get(key), setItem: (key,value) => sessionStore.set(key,value), removeItem: key => sessionStore.delete(key) },
         localStorage: {
             getItem(key) { if (denied) throw Error('denied'); return store.get(key) ?? null; },
             setItem(key, value) { if (denied) throw Error('denied'); store.set(key, value); }
@@ -54,7 +55,7 @@ function harness(saved, denied = false) {
     // A frozen note catches attempted type/MIME/language mutations during switches.
     widget.note = Object.freeze({ type: 'code', mime: 'text/x-python', noteId: 'knowledge' });
     widget.doRender();
-    return { widget, store, attrs, listeners, scriptApi, timers, transport, window };
+    return { widget, store, attrs, listeners, scriptApi, timers, transport, window, sessionStore };
 }
 
 (async () => {
@@ -104,239 +105,337 @@ function harness(saved, denied = false) {
     assert.equal(listeners.size, 0);
     assert.equal(widget.$picker.handlers.size, 0);
     assert.equal(attrs.size, 0);
-    // Backend scripting stays disabled; exercise native requests against a separate durable store.
-    const h = harness();
-    let content = 'import os\ndef main():\n    print(os.getcwd())';
-    const labels = new Map();
-    const makeNote = () => Object.freeze({ noteId: 'per-note', type: 'code', mime: 'text/plain',
-        title: 'example', getContent: async () => content,
-        getOwnedLabelValue: name => labels.get(name),
-        getOwnedLabels: name => labels.has(name) ? [{attributeId: 'lock-id', value: labels.get(name), isInheritable: false}] : [] });
-    let attributeWrites = 0;
-    h.scriptApi.runOnBackend = async () => { throw Error('Backend scripting disabled'); };
-    h.transport.fetch = async (url, options) => {
-        assert.equal(options.credentials, 'same-origin');
-        assert.equal(options.mode, 'same-origin');
-        assert.equal(options.redirect, 'error');
-        assert.equal(options.headers['x-csrf-token'], 'FIXTURE_CSRF');
-        assert.equal(options.headers.Authorization, undefined);
-        assert.ok(options.signal instanceof AbortSignal);
-        if (options.method === 'PUT') {
-            assert.equal(url, 'https://fixture.invalid/lore/api/notes/per-note/set-attribute');
-            const body = JSON.parse(options.body);
-            assert.deepEqual(Object.keys(body).sort(), ['isInheritable', 'name', 'type', 'value']);
-            assert.equal(body.name, 'thgSublimeLanguage');
-            assert.equal(body.type, 'label');
-            assert.equal(body.isInheritable, false);
-            labels.set(body.name, body.value);
-        } else {
-            assert.equal(options.method, 'DELETE');
-            assert.equal(url, 'https://fixture.invalid/lore/api/notes/per-note/attributes/lock-id');
-            assert.equal(options.body, undefined);
-            labels.delete('thgSublimeLanguage');
+    // Separate durable server state; only the exact native routes can mutate it.
+    function fixture() {
+        const h = harness();
+        const db = { noteId: 'per-note', type: 'code', mime: 'text/plain', isProtected: false,
+            content: 'import os\ndef main():\n    print(os.getcwd())', attributes: [{attributeId:'other', name:'other', value:'keep'}] };
+        const snapshot = () => {
+            const row = JSON.parse(JSON.stringify(db));
+            return Object.freeze({...row, getContent: async () => row.content,
+                getOwnedLabelValue: name => row.attributes.find(a => a.name === name)?.value,
+                getOwnedLabels: name => row.attributes.filter(a => a.name === name)});
+        };
+        const writes = [];
+        h.scriptApi.reloadNotes = async () => {};
+        h.scriptApi.getNote = async () => snapshot();
+        h.scriptApi.runOnBackend = async () => { throw Error('Backend scripting disabled'); };
+        h.transport.fetch = async (url, options) => {
+            assert.equal(options.credentials, 'same-origin');
+            assert.equal(options.mode, 'same-origin');
+            assert.equal(options.redirect, 'error');
+            assert.equal(options.headers['x-csrf-token'], 'FIXTURE_CSRF');
+            assert.equal(options.headers.Authorization, undefined);
+            assert.ok(options.signal instanceof AbortSignal);
+            const body = options.body && JSON.parse(options.body);
+            if (options.method === 'GET') {
+                if (url.endsWith('/notes/other/attributes')) return {ok:true,json:async()=>[]};
+                assert.equal(url, 'https://fixture.invalid/lore/api/notes/per-note/attributes');
+                return {ok:true, json:async()=>JSON.parse(JSON.stringify(db.attributes.map(a=>({noteId:db.noteId,type:'label',...a}))))};
+            }
+            writes.push({url, method: options.method, body});
+            if (url.endsWith('/type')) {
+                assert.equal(url, 'https://fixture.invalid/lore/api/notes/per-note/type');
+                assert.equal(options.method, 'PUT');
+                assert.deepEqual(Object.keys(body).sort(), ['mime', 'type']);
+                assert.equal(body.type, 'code');
+                // Pinned setNoteTypeMime assigns both fields; it does NOT merge a MIME-only body.
+                const nativeHandler = require('./fixtures/trilium-0.104.1-type.cjs')({getNoteOrThrow: id => {
+                    assert.equal(id, db.noteId);
+                    return Object.assign(db, {save() {delete db.save;}});
+                }});
+                nativeHandler({params:{noteId:db.noteId},body});
+            } else if (options.method === 'PUT') {
+                assert.equal(url, 'https://fixture.invalid/lore/api/notes/per-note/set-attribute');
+                assert.deepEqual(Object.keys(body).sort(), ['isInheritable','name','type','value']);
+                assert.equal(body.name, 'thgSublimeLanguage');
+                assert.equal(body.type, 'label'); assert.equal(body.isInheritable, false);
+                const attr = db.attributes.find(a => a.name === body.name);
+                if (attr) attr.value = body.value;
+                else db.attributes.push({attributeId:'override', ...body});
+            } else {
+                assert.equal(options.method, 'DELETE');
+                const id = url.split('/').pop();
+                assert.equal(url, `https://fixture.invalid/lore/api/notes/per-note/attributes/${id}`);
+                assert.equal(body, undefined);
+                db.attributes = db.attributes.filter(a => a.attributeId !== id);
+            }
+            return {ok:true};
+        };
+        const refresh = async () => { h.widget.note = snapshot(); await h.widget.refreshWithNote(h.widget.note); };
+        const override = () => db.attributes.find(a => a.name === 'thgSublimeLanguage')?.value;
+        const mimeWrites = () => writes.filter(w => w.url.endsWith('/type')).length;
+        return {...h, db, snapshot, writes, refresh, override, mimeWrites};
+    }
+    const h = fixture();
+    const original = h.db.content;
+    await h.refresh();
+    assert.match(h.widget.$language.textContent, /Language: Python · Auto · 90%/);
+    assert.equal(h.widget.$highlighting.textContent, 'Highlighting: Python');
+    assert.equal(h.db.mime, 'text/x-python'); assert.equal(h.mimeWrites(), 1);
+    for (let i=0; i<5; i++) await h.refresh();
+    assert.equal(h.mimeWrites(), 1);
+    const autoReopen=harness();
+    autoReopen.scriptApi.reloadNotes=h.scriptApi.reloadNotes; autoReopen.scriptApi.getNote=h.scriptApi.getNote;
+    autoReopen.transport.fetch=h.transport.fetch;
+    await autoReopen.widget.refreshWithNote(h.snapshot());
+    assert.equal(h.mimeWrites(),1); assert.equal(h.writes.length,1);
+    assert.equal(autoReopen.widget.$highlighting.textContent,'Highlighting: Python');
+    autoReopen.widget.cleanup();
+    const hysteresis=fixture(); await hysteresis.refresh();
+    hysteresis.db.content='package main\nfunc main() { count := 1; fmt.Println(count) }';
+    await hysteresis.refresh(); await hysteresis.refresh(); assert.equal(hysteresis.mimeWrites(),1);
+    hysteresis.db.content+='\n// distinct edit'; await hysteresis.refresh();
+    assert.equal(hysteresis.mimeWrites(),2); assert.equal(hysteresis.db.mime,'text/x-go');
+    assert.equal(h.widget.$languagePicker.children[0].textContent, 'Auto-detect language');
+    assert.match(h.widget.$languagePicker.html, /Language mode and syntax highlighting/);
+    assert.match(h.widget.$languagePicker.title, /never rewrites code/);
+    for (const option of h.widget.$languagePicker.children.slice(2, -1)) assert.match(option.title, /Manual override/);
+    const languageContext = vm.createContext({});
+    vm.runInContext(fs.readFileSync('sublime/language.js','utf8') + ';this.rows=THG_LANGUAGES;', languageContext);
+    for (const [id, name, mime] of languageContext.rows) {
+        await h.widget.setLanguageLock(id);
+        assert.equal(h.override(), id); assert.equal(h.db.mime, mime);
+        assert.equal(h.widget.$language.textContent, `Language: ${name} · Manual`);
+        assert.doesNotMatch(h.widget.$highlighting.textContent, /confirmed|→/);
+        assert.equal(h.db.content, original); assert.equal(h.db.type, 'code');
+        const before = h.writes.length;
+        await h.refresh(); assert.equal(h.writes.length, before);
+    }
+    await h.widget.setLanguageLock('rust');
+    await h.widget.setLanguageLock('');
+    assert.equal(h.override(), undefined); assert.equal(h.db.mime, 'text/x-python');
+    assert.deepEqual(h.db.attributes, [{attributeId:'other', name:'other', value:'keep'}]);
+    assert.match(h.widget.$language.textContent, /Python · Auto/);
+    h.db.content = 'x';
+    const beforeUnknown = h.writes.length;
+    for (let i=0; i<5; i++) await h.refresh();
+    assert.equal(h.writes.length, beforeUnknown); assert.equal(h.db.mime, 'text/x-python');
+    assert.equal(h.widget.$language.textContent, 'Language: Unknown · Auto');
+    assert.equal(h.widget.$highlighting.textContent, 'Highlighting unchanged');
+    await h.widget.setLanguageLock('plain');
+    assert.equal(h.db.mime, 'text/plain'); assert.equal(h.db.content, 'x');
+    await h.widget.setLanguageLock('');
+    assert.equal(h.db.mime, 'text/plain');
+    const bytes = fixture();
+    bytes.db.content='α café\r\n\t<literal>\u0000'; await bytes.refresh();
+    const exact=Buffer.from(bytes.db.content,'utf8');
+    for(const id of ['python','rust','plain','']) {
+        await bytes.widget.setLanguageLock(id);
+        assert.deepEqual(Buffer.from(bytes.db.content,'utf8'),exact);
+        assert.equal(bytes.db.type,'code');
+    }
+    // Every unsafe fresh metadata variant blocks both writes despite stale eligible cache.
+    for (const changed of [{type:'text'}, {type:'canvas'}, {type:'file'}, {type:'search'}, {isProtected:true},
+        ...['', 'foreign', 'thg-sublime-phase1-v1'].map(value => ({attributes:[{name:'thgSublimeOwner',value}]}))]) {
+        const f = fixture(); const stale = f.snapshot(); Object.assign(f.db, changed);
+        f.widget.activeNote = stale; await f.widget.setLanguageLock('rust');
+        assert.equal(f.writes.length, 0);
+        await f.widget.refreshWithNote(stale); assert.equal(f.writes.length, 0);
+    }
+    // Partial failures: label-only, durable writes followed by lost responses, and failed auth.
+    for (const failure of ['label-only', 'label-timeout', 'mime-timeout', 'http', 'csrf', 'timeout', 'unconfirmed']) {
+        const f = fixture(); f.db.content = 'x'; await f.refresh();
+        const working = f.transport.fetch; let calls = 0;
+        f.transport.fetch = async (url, options) => {
+            if (options.method === 'GET') return working(url, options);
+            calls++;
+            if (failure === 'label-only' && url.endsWith('/type')) return {ok:false};
+            if (failure === 'label-timeout' && url.endsWith('/set-attribute')) { await working(url,options); throw Error('timeout'); }
+            if (failure === 'mime-timeout' && url.endsWith('/type')) { await working(url,options); throw Error('timeout'); }
+            if (failure === 'http' || failure === 'csrf') return {ok:false, status:403};
+            if (failure === 'timeout') throw Error('timeout');
+            if (failure === 'unconfirmed') return {ok:true};
+            return working(url, options);
+        };
+        await f.widget.setLanguageLock('rust');
+        assert.match(f.widget.$highlighting.textContent, /not confirmed/i);
+        const manual = ['label-only','label-timeout','mime-timeout'].includes(failure);
+        assert.equal(f.override(), manual ? 'rust' : undefined);
+        assert.match(f.widget.$language.textContent, manual ? /Rust · Manual/ : /Unknown · Auto/);
+        assert.equal(f.db.mime, failure === 'mime-timeout' ? 'text/x-rustsrc' : 'text/plain');
+        const attempts = calls;
+        for (let i=0;i<5;i++) await f.refresh();
+        assert.equal(calls, attempts, 'uncertain writes are never retried on refresh');
+        const reopened = harness(undefined, false, f.sessionStore);
+        reopened.scriptApi.reloadNotes = f.scriptApi.reloadNotes;
+        reopened.scriptApi.getNote = f.scriptApi.getNote;
+        reopened.transport.fetch = f.transport.fetch;
+        await reopened.widget.refreshWithNote(f.snapshot());
+        assert.equal(calls, attempts, 'a fresh bundle with session storage must not retry');
+        assert.match(reopened.widget.$language.textContent, manual ? /Rust · Manual/ : /Unknown · Auto/);
+        assert.match(reopened.widget.$highlighting.textContent, /not confirmed/i);
+        assert.equal(reopened.widget.$languagePicker.val(), 'retry-language');
+        reopened.widget.cleanup();
+        assert.equal(f.db.content, 'x'); assert.equal(f.db.type, 'code');
+    }
+    // MIME-only durable state with missing override is Auto, including reopening.
+    const partial = fixture(); partial.db.mime = 'text/x-rustsrc'; partial.db.content = 'x';
+    await partial.refresh(); assert.match(partial.widget.$language.textContent, /Unknown · Auto/);
+    assert.equal(partial.writes.length, 0);
+    // Auto errors do not loop even with repeated metadata events or new content.
+    const failed = fixture(); let attempts = 0;
+    const failedTransport = failed.transport.fetch;
+    failed.transport.fetch = async (url, options) => {if(options.method === 'GET') return failedTransport(url,options); attempts++; throw Error('timeout');};
+    await failed.refresh();
+    for (let i=0;i<5;i++) await failed.refresh();
+    assert.equal(attempts, 1); assert.match(failed.widget.$highlighting.textContent, /not confirmed/i);
+    const fresh = harness(undefined, false, failed.sessionStore);
+    fresh.scriptApi.reloadNotes = failed.scriptApi.reloadNotes; fresh.scriptApi.getNote = failed.scriptApi.getNote;
+    fresh.transport.fetch = failed.transport.fetch;
+    await fresh.widget.refreshWithNote(failed.snapshot()); assert.equal(attempts, 1);
+    fresh.widget.cleanup();
+    // A concurrent loss of the override after the MIME write must never fabricate Manual.
+    const mimeOnly = fixture(); mimeOnly.db.content='x'; await mimeOnly.refresh();
+    const commit = mimeOnly.transport.fetch;
+    mimeOnly.transport.fetch = async (url,options) => {
+        const result = await commit(url,options);
+        if (url.endsWith('/type')) {
+            mimeOnly.db.attributes = mimeOnly.db.attributes.filter(a=>a.name!=='thgSublimeLanguage');
+            throw Error('Lost response after concurrent override removal');
         }
-        attributeWrites++;
-        return {ok: true};
+        return result;
     };
-    h.scriptApi.reloadNotes = async () => {};
-    h.scriptApi.getNote = async () => makeNote();
-    h.widget.note = makeNote();
-    await h.widget.refreshWithNote(h.widget.note);
-    assert.match(h.widget.$language.textContent, /Python.*Unlocked/);
-    const original = content;
-    await h.widget.setLanguageLock('rust');
-    assert.equal(labels.get('thgSublimeLanguage'), 'rust');
-    assert.match(h.widget.$language.textContent, /Rust · Locked/);
-    assert.equal(content, original);
-    assert.equal(h.widget.note.mime, 'text/plain');
-    const reopened = harness();
-    await reopened.widget.refreshWithNote(makeNote());
-    assert.match(reopened.widget.$language.textContent, /Rust · Locked/);
-    await h.widget.refreshWithNote(Object.freeze({ ...makeNote(), noteId: 'other', getOwnedLabelValue: () => null }));
-    assert.match(h.widget.$language.textContent, /Python.*Unlocked/);
-    await h.widget.refreshWithNote(makeNote());
-    await h.widget.setLanguageLock('');
-    assert.equal(labels.size, 0);
-    assert.match(h.widget.$language.textContent, /Python.*Unlocked/);
-    const writes = attributeWrites;
-    await h.widget.refreshWithNote({ ...makeNote(), type: 'text' });
-    await h.widget.setLanguageLock('python');
-    assert.equal(attributeWrites, writes);
-    assert.match(h.widget.$language.textContent, /Unknown/);
-    await h.widget.refreshWithNote(makeNote());
-    const workingTransport = h.transport.fetch;
-    h.transport.fetch = async () => ({ok: false, status: 403});
-    await h.widget.setLanguageLock('go');
-    assert.match(h.widget.$language.textContent, /not confirmed/);
-    assert.equal(labels.size, 0);
-    // No retries on HTTP/auth/timeout failures; no leakage to another origin.
-    for (const failure of [async () => ({ok:false, status:401}),
-        async () => { throw Error('timeout'); }, async () => { throw Error('redirect'); }]) {
-        let requests = 0;
-        h.transport.fetch = async (...args) => { requests++; return failure(...args); };
-        await h.widget.setLanguageLock('go');
-        assert.equal(requests, 1);
-        assert.match(h.widget.$language.textContent, /not confirmed/);
-        assert.equal(labels.size, 0);
+    await mimeOnly.widget.setLanguageLock('rust');
+    assert.equal(mimeOnly.db.mime,'text/x-rustsrc'); assert.equal(mimeOnly.override(),undefined);
+    assert.match(mimeOnly.widget.$language.textContent,/Unknown · Auto/);
+    assert.match(mimeOnly.widget.$highlighting.textContent,/not confirmed/i);
+    assert.equal(mimeOnly.db.content,'x');
+    // Failed authoritative reload cannot leave an optimistic language in the UI.
+    const reloadFailure = fixture(); reloadFailure.db.content='x'; await reloadFailure.refresh();
+    let reads=0;
+    reloadFailure.scriptApi.reloadNotes=async()=>{if(++reads>1) throw Error('offline');};
+    await reloadFailure.widget.setLanguageLock('rust');
+    assert.equal(reloadFailure.override(),'rust'); assert.equal(reloadFailure.mimeWrites(),0);
+    assert.equal(reloadFailure.widget.$language.textContent,'Language unavailable');
+    reloadFailure.scriptApi.reloadNotes=async()=>{}; await reloadFailure.refresh();
+    assert.match(reloadFailure.widget.$language.textContent,/Rust · Manual/);
+    assert.match(reloadFailure.widget.$highlighting.textContent,/Plain text → Rust.*not confirmed/i);
+    // Fresh metadata events generated synchronously by our own reload cannot create a loop.
+    const events = fixture();
+    // Native reloadNotes emits notesReloaded, not entitiesReloaded.
+    events.scriptApi.reloadNotes = async () => {};
+    await events.refresh();
+    assert.equal(events.mimeWrites(), 1); assert.equal(events.timers.size, 0);
+    for(let i=0;i<50;i++) events.widget.entitiesReloadedEvent({loadResults:{isNoteReloaded:()=>true}});
+    assert.equal(events.timers.size, 1);
+    await [...events.timers.values()][0](); events.timers.clear();
+    assert.equal(events.mimeWrites(), 1);
+    // Native cache merges returned attributes; deletion sync is delivered later.
+    const delayed = fixture(); await delayed.refresh(); await delayed.widget.setLanguageLock('rust');
+    const cachedRust = delayed.snapshot();
+    delayed.scriptApi.getNote = async () => Object.freeze({...delayed.snapshot(),
+        getOwnedLabels: cachedRust.getOwnedLabels, getOwnedLabelValue: cachedRust.getOwnedLabelValue});
+    await delayed.widget.setLanguageLock('');
+    assert.equal(delayed.override(), undefined);
+    assert.equal(delayed.db.mime, 'text/x-python');
+    assert.match(delayed.widget.$language.textContent, /Python · Auto/);
+    assert.doesNotMatch(delayed.widget.$highlighting.textContent, /not confirmed/);
+    const converged = delayed.writes.length;
+    delayed.scriptApi.getNote = async () => delayed.snapshot();
+    delayed.widget.entitiesReloadedEvent({loadResults:{isNoteReloaded:()=>true}});
+    const deliver = [...delayed.timers.values()][0]; delayed.timers.clear(); await deliver();
+    assert.equal(delayed.writes.length, converged);
+    assert.equal(delayed.timers.size, 0);
+    assert.equal(delayed.db.content, original);
+    // An external edit after the last content snapshot must survive busy/read guards.
+    for (const manual of [false, true]) {
+        const f = fixture(); f.db.content='x'; await f.refresh();
+        let injected=false;
+        f.scriptApi.getNote=async()=>{
+            const snapshot=f.snapshot();
+            return Object.freeze({...snapshot,getContent:async()=>{
+                const content=await snapshot.getContent();
+                if(!injected) {
+                    injected=true;
+                    f.db.content=original;
+                    f.db.attributes=[];
+                    f.widget.entitiesReloadedEvent({loadResults:{isNoteReloaded:()=>false,
+                        isNoteContentReloaded:()=>true}});
+                }
+                return content;
+            }});
+        };
+        if(manual) await f.widget.setLanguageLock(''); else await f.refresh();
+        assert.equal(f.timers.size,1);
+        const follow=[...f.timers.values()][0]; f.timers.clear(); await follow();
+        // Existing hysteresis requires a second distinct Python sample.
+        assert.equal(f.widget.states.get(f.db.noteId).pending, 'python');
+        f.db.content += '\n# final edit';
+        await f.refresh();
+        assert.match(f.widget.$language.textContent,/Python · Auto/);
+        assert.equal(f.db.mime,'text/x-python');
+        assert.equal(f.timers.size,0);
+        assert.equal(f.mimeWrites(),1);
     }
-    h.transport.fetch = workingTransport;
-    for (const base of ['https://other.invalid/api/', '/etapi/', '/lore/api/?token=x', '/lore/api/#x']) {
-        h.window.glob.baseApiUrl = base;
-        const before = attributeWrites;
-        await h.widget.setLanguageLock('go');
-        assert.equal(attributeWrites, before);
-        assert.match(h.widget.$language.textContent, /not confirmed/);
-    }
-    h.window.glob.baseApiUrl = '/lore/api/';
-    h.window.glob.csrfToken = '';
-    await h.widget.setLanguageLock('go');
-    assert.equal(labels.size, 0);
-    h.window.glob.csrfToken = 'FIXTURE_CSRF';
-    // Refresh must recheck changed type/protection before any mutation.
-    for (const changed of [{type:'text'}, {isProtected:true}]) {
-        h.scriptApi.getNote = async () => ({...makeNote(), ...changed});
-        await h.widget.setLanguageLock('go');
-        assert.equal(labels.size, 0);
-        assert.match(h.widget.$language.textContent, /not confirmed/);
-    }
-    h.scriptApi.getNote = async () => makeNote();
-    // Native set-attribute cannot repair inheritance or duplicates: explicit clear required.
-    for (const locks of [[{attributeId:'lock-id', isInheritable:true}],
-        [{attributeId:'lock-id'}, {attributeId:'second-id'}]]) {
-        h.scriptApi.getNote = async () => ({...makeNote(), getOwnedLabels: () => locks});
-        const before = attributeWrites;
-        await h.widget.setLanguageLock('go');
-        assert.equal(attributeWrites, before);
-        assert.match(h.widget.$language.textContent, /not confirmed/);
-    }
-    h.scriptApi.getNote = async () => makeNote();
-    // Failed replacement must retain the previous durable override.
-    labels.set('thgSublimeLanguage', 'rust');
-    h.transport.fetch = async () => ({ok:false, status:403});
-    await h.widget.setLanguageLock('go');
-    assert.equal(labels.get('thgSublimeLanguage'), 'rust');
-    await h.widget.refreshWithNote(makeNote());
-    assert.match(h.widget.$language.textContent, /Rust · Locked/);
-    // Clear removes all and only owned lock IDs, including malformed duplicates.
-    const attributes = [
-        {attributeId:'first', name:'thgSublimeLanguage'},
-        {attributeId:'second', name:'thgSublimeLanguage', isInheritable:true},
-        {attributeId:'unrelated', name:'other'}
-    ];
-    h.scriptApi.getNote = async () => ({...makeNote(), getOwnedLabels: name =>
-        attributes.filter(attr => attr.name === name)});
-    const deleted = [];
-    h.transport.fetch = async (url, options) => {
-        assert.equal(options.method, 'DELETE');
-        const id = url.split('/').pop(); deleted.push(id);
-        const index = attributes.findIndex(attr => attr.attributeId === id);
-        assert.ok(index >= 0); attributes.splice(index, 1);
-        labels.delete('thgSublimeLanguage');
-        return {ok:true};
-    };
-    await h.widget.setLanguageLock('');
-    assert.deepEqual(deleted, ['first', 'second']);
-    assert.deepEqual(attributes, [{attributeId:'unrelated', name:'other'}]);
-    h.scriptApi.getNote = async () => makeNote();
-    h.transport.fetch = workingTransport;
-    labels.set('thgSublimeLanguage', 'invalid');
-    await h.widget.refreshWithNote(makeNote());
-    assert.match(h.widget.$language.textContent, /Invalid language lock/);
-    assert.equal(h.widget.$languagePicker.val(), 'invalid-lock');
-    h.transport.fetch = workingTransport;
-    h.widget.$languagePicker.val('');
-    await h.widget.$languagePicker.handlers.get('change')();
-    assert.equal(labels.has('thgSublimeLanguage'), false);
-    assert.match(h.widget.$language.textContent, /Python.*Unlocked/);
-    assert.equal(content, original);
-    await h.widget.setLanguageLock('rust');
-    content = '';
-    await h.widget.refreshWithNote(makeNote());
-    assert.match(h.widget.$language.textContent, /Rust · Locked/);
-    await h.widget.setLanguageLock('');
-    for (let refresh = 0; refresh < 5; refresh++) {
-        await h.widget.refreshWithNote(makeNote());
-        assert.equal(h.widget.$language.textContent, 'Plain Text / Unknown · 0% · Unlocked');
-    }
-    content = original;
-    await h.widget.refreshWithNote(makeNote());
-    content = original + '\n';
-    await h.widget.refreshWithNote(makeNote());
-    assert.match(h.widget.$language.textContent, /Python.*Unlocked/);
-    content = 'x';
-    for (let refresh = 0; refresh < 5; refresh++) {
-        await h.widget.refreshWithNote(makeNote());
-        assert.equal(h.widget.$language.textContent, 'Plain Text / Unknown · 0% · Unlocked');
-    }
-    await reopened.widget.refreshWithNote(makeNote());
-    assert.equal(reopened.widget.$language.textContent, 'Plain Text / Unknown · 0% · Unlocked');
-    await h.widget.setLanguageLock('python');
-    await h.widget.refreshWithNote(makeNote());
-    assert.match(h.widget.$language.textContent, /Python · Locked/);
-    await h.widget.setLanguageLock('');
-    assert.equal(h.widget.$language.textContent, 'Plain Text / Unknown · 0% · Unlocked');
-    assert.equal(content, 'x');
-    content = original;
-    let resolveContent;
-    const pending = h.widget.refreshWithNote({ ...makeNote(), getContent: () => new Promise(resolve => { resolveContent = resolve; }) });
-    await h.widget.refreshWithNote(null);
-    resolveContent(original);
+    // Guard a navigation while the preflight read is outstanding.
+    const race = fixture(); race.widget.activeNote = race.snapshot();
+    let release;
+    race.scriptApi.reloadNotes = () => new Promise(resolve => {release = resolve;});
+    const pending = race.widget.setLanguageLock('rust');
+    await race.widget.refreshWithNote(null); release();
+    // Recovery checks navigation before attempting another read.
     await pending;
-    assert.match(h.widget.$language.textContent, /Unknown/);
-    await h.widget.refreshWithNote(makeNote());
-    for (let i = 0; i < 50; i++) h.widget.entitiesReloadedEvent({ loadResults: {
-        isNoteReloaded: () => false, isNoteContentReloaded: () => true } });
-    assert.equal(h.timers.size, 1);
-    h.timers.clear();
-    labels.set('thgSublimeLanguage', 'swift');
-    h.widget.entitiesReloadedEvent({ loadResults: {
-        isNoteReloaded: () => false, isNoteContentReloaded: () => false,
-        getAttributeRows: () => [{ noteId: 'per-note' }] } });
-    assert.equal(h.timers.size, 1);
-    const refreshRemoteLock = [...h.timers.values()][0];
-    h.timers.clear();
-    await refreshRemoteLock();
-    assert.match(h.widget.$language.textContent, /Swift · Locked/);
-    h.widget.entitiesReloadedEvent({ loadResults: {
-        isNoteReloaded: () => false, isNoteContentReloaded: () => false,
-        getAttributeRows: () => [{ noteId: 'unrelated' }] } });
-    assert.equal(h.timers.size, 0);
-    await h.widget.refreshWithNote({ ...makeNote(), isProtected: true });
-    assert.equal(h.widget.$languagePicker.disabled, true);
-    const protectedWrites = attributeWrites;
-    await h.widget.setLanguageLock('python');
-    assert.equal(attributeWrites, protectedWrites);
-    // Real deployed fixture metadata, followed by Python ETAPI update/disable.
+    assert.equal(race.writes.length, 0); assert.equal(race.widget.$language.textContent, 'Language: Unknown · Auto');
+    // Navigation/dispose between the two writes stops the second write and preserves durable truth.
+    for (const dispose of [false,true]) {
+        const f=fixture(); f.db.content='x'; await f.refresh();
+        let resolveWrite; const transport=f.transport.fetch;
+        f.transport.fetch=async(url,options)=>{await transport(url,options); if(options.method === 'GET') return {ok:true,json:async()=>f.db.attributes.map(a=>({noteId:f.db.noteId,type:'label',...a}))}; await new Promise(r=>{resolveWrite=r;}); return {ok:true};};
+        const action=f.widget.setLanguageLock('rust');
+        for(let i=0;!resolveWrite && i<100;i++) await Promise.resolve();
+        assert.ok(resolveWrite);
+        if(dispose) f.widget.cleanup(); else await f.widget.refreshWithNote(null);
+        resolveWrite(); await action;
+        assert.equal(f.override(),'rust'); assert.equal(f.mimeWrites(),0); assert.equal(f.db.content,'x');
+    }
+    // A new code note waits for the old write, then performs its own guarded reconciliation.
+    const navigation = fixture(); navigation.db.content='x'; await navigation.refresh();
+    let finishOld, otherMime='text/plain', otherWrites=0;
+    const other=()=>Object.freeze({...navigation.snapshot(),noteId:'other',mime:otherMime,
+        getContent:async()=>original,getOwnedLabelValue:()=>undefined,getOwnedLabels:()=>[]});
+    navigation.scriptApi.getNote=async id=>id==='other' ? other() : navigation.snapshot();
+    const nativeTransport=navigation.transport.fetch;
+    navigation.transport.fetch=async(url,options)=>{
+        if(url.endsWith('/notes/other/type')) {
+            assert.ok(finishOld, 'old request reached transport');
+            otherWrites++; otherMime=JSON.parse(options.body).mime; return {ok:true};
+        }
+        const result=await nativeTransport(url,options);
+        if(options.method === 'GET') return result;
+        await new Promise(resolve=>{finishOld=resolve;}); return result;
+    };
+    const oldAction=navigation.widget.setLanguageLock('rust');
+    for(let i=0;!finishOld && i<100;i++)await Promise.resolve();
+    assert.ok(finishOld);
+    await navigation.widget.refreshWithNote(other()); assert.equal(otherWrites,0);
+    finishOld(); await oldAction;
+    assert.equal(otherWrites,1); assert.equal(otherMime,'text/x-python');
+    assert.match(navigation.widget.$language.textContent,/Python · Auto/);
+    assert.equal(navigation.db.mime,'text/plain'); assert.equal(navigation.override(),'rust');
+    // Wrong-origin, redirected, malformed transport context never produces a write.
+    for (const base of ['https://other.invalid/api/', '/etapi/', '/lore/api/?token=x', '/lore/api/#x']) {
+        const f = fixture(); f.db.content='x'; await f.refresh(); f.window.glob.baseApiUrl=base;
+        await f.widget.setLanguageLock('rust'); assert.equal(f.writes.length,0);
+        assert.match(f.widget.$highlighting.textContent,/not confirmed/i);
+    }
+    for (const locks of [[{attributeId:'a',name:'thgSublimeLanguage',value:'rust',isInheritable:true}],
+        ['a','b'].map(attributeId=>({attributeId,name:'thgSublimeLanguage',value:'rust'}))]) {
+        const f=fixture(); f.db.attributes.push(...locks); await f.refresh();
+        await f.widget.setLanguageLock('go'); assert.equal(f.writes.length,0);
+        await f.widget.setLanguageLock(''); assert.equal(f.override(),undefined);
+        assert.deepEqual(f.db.attributes,[{attributeId:'other',name:'other',value:'keep'}]);
+    }
     if (process.argv[3]) {
         const deployed = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
-        for (const record of Object.values(deployed).filter(n => n.type === 'code')) {
-            const getOwnedLabelValue = name => record.attributes.find(a => a.name === name)?.value;
-            const frontend = { ...record, getOwnedLabelValue, getContent: async () => record.content };
-            let calls = 0;
-            h.transport.fetch = async () => { calls++; throw Error('Unexpected managed write'); };
-            h.scriptApi.getNote = async () => frontend;
-            await h.widget.refreshWithNote(frontend);
-            assert.equal(h.widget.$languagePicker.disabled, true);
-            for (const id of ['python', '']) await h.widget.setLanguageLock(id);
-            assert.equal(calls, 0, 'Managed note must be blocked before native request');
-            // Stale frontend cache lacks marker: fresh metadata must refuse before a request.
-            await h.widget.refreshWithNote({ ...frontend, getOwnedLabelValue: () => null });
-            await h.widget.setLanguageLock('rust');
-            assert.equal(calls, 0);
-            assert.match(h.widget.$language.textContent, /not confirmed/);
-            assert.equal(getOwnedLabelValue('thgSublimeLanguage'), undefined);
+        for (const record of Object.values(deployed).filter(n=>n.type==='code')) {
+            const f=fixture(); Object.assign(f.db,record);
+            const stale={...f.snapshot(),getOwnedLabelValue:()=>null};
+            await f.widget.refreshWithNote(stale); await f.widget.setLanguageLock('rust');
+            assert.equal(f.writes.length,0);
         }
-        fs.writeFileSync(process.argv[3], JSON.stringify(deployed));
+        fs.writeFileSync(process.argv[3],JSON.stringify(deployed));
     }
-    for (const owner of ['', 'foreign-owner', 'thg-sublime-phase1-v1']) {
-        await h.widget.refreshWithNote({ ...makeNote(), getOwnedLabelValue: name =>
-            name === 'thgSublimeOwner' ? owner : null });
-        assert.equal(h.widget.$languagePicker.disabled, true);
-        await h.widget.setLanguageLock('python');
-        assert.equal(attributeWrites, protectedWrites);
-    }
-    h.widget.cleanup();
-    assert.equal(h.timers.size, 0);
-    reopened.widget.cleanup();
-    console.log(`Controller: nine schemes, persistence/fallback, events, lifecycle, no note mutation passed (${elapsed.toFixed(1)}ms harness time).`);
+    h.widget.cleanup(); events.widget.cleanup(); assert.equal(events.timers.size,0);
+    console.log(`Controller: themes, native MIME/override durability, safety, partial failures and races passed (${elapsed.toFixed(1)}ms theme harness).`);
 })().catch(error => { console.error(error); process.exit(1); });

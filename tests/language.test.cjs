@@ -94,3 +94,8 @@ const mimes = ['text/plain','text/x-python','text/javascript','application/types
  'text/css','text/x-markdown','text/x-dockerfile'];
 assert.deepEqual(Array.from(context.languages, row => row[2]), mimes);
 assert.equal(new Set(Array.from(context.languages, row => row[0])).size, 19);
+
+assert.deepEqual(Array.from(context.languages, row => row[0]),
+ ['plain','python','javascript','typescript','json','shell','c','cpp','java','kotlin','swift','rust','go','yaml','sql','html','css','markdown','dockerfile']);
+assert.equal(new Set(Array.from(context.languages, row => row[2])).size, 19);
+assert.equal(context.languages.length, 19);

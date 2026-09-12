@@ -296,7 +296,7 @@ class Package(unittest.TestCase):
 
     def test_disable_documentation_and_live_plan(self):
         doc = (ROOT / "docs/THG-SUBLIME.md").read_text()
-        for phrase in ("disable", "Ctrl+Shift+R", "Phases 2–5", "clds approve", "get_service_health", "get_route_health"):
+        for phrase in ("disable", "Ctrl+Shift+R", "CLDS-0047", "human browser acceptance", "clds approve", "get_service_health", "get_route_health"):
             self.assertIn(phrase, doc)
         steps = json.loads((ROOT / "docs/sublime-live-verify.json").read_text())["steps"]
         self.assertEqual([s["tool"] for s in steps], ["get_service_health", "get_route_health"])

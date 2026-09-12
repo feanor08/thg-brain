@@ -10,6 +10,7 @@ import platform
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -56,7 +57,7 @@ def stop_browser(process):
     process.wait(timeout=3)
 
 
-def render(html, width, timeout=45, api_handler=None):
+def render(html, width, timeout=45, api_handler=None, keyboard=False):
     browser = resolve_browser()
     outcome = []
 
@@ -88,6 +89,14 @@ def render(html, width, timeout=45, api_handler=None):
             self.wfile.write(body)
 
         def do_POST(self):
+            if keyboard and self.path in ('/keyboard/rust', '/keyboard/auto'):
+                node = subprocess.check_output([sys.executable, str(ROOT / 'scripts/sublime/runtime.py')], text=True).strip()
+                subprocess.run([node, str(ROOT / 'tests/chromium_keys.cjs'),
+                                str(Path(directory) / 'profile'), self.path.split('/')[-1]],
+                               check=True, timeout=10, capture_output=True)
+                self.send_response(204)
+                self.end_headers()
+                return
             length = int(self.headers.get('Content-Length', '0'))
             if self.path != '/result' or not 0 < length <= 4096:
                 self.send_error(400)
@@ -113,6 +122,8 @@ def render(html, width, timeout=45, api_handler=None):
                 '--no-proxy-server', '--user-data-dir=' + str(Path(directory) / 'profile'),
                 '--window-size=' + str(width) + ',800',
                 f'http://127.0.0.1:{server.server_port}/fixture']
+        if keyboard:
+            args.insert(2, '--remote-debugging-port=0')
         if platform.system() == 'Linux':
             args.insert(2, '--no-sandbox')
         # File output cannot fill a pipe and deadlock Chrome startup/shutdown.
