@@ -44,7 +44,7 @@ const crypto = require('node:crypto');
         for(let i=0;i<data.length;i++)data[i]^=mask[i%4];
         socket.write(Buffer.concat([header,mask,data]));
     });
-    const key = action==='rust' ? {key:'r',code:'KeyR',windowsVirtualKeyCode:82,text:'r'} : {key:'Home',code:'Home',windowsVirtualKeyCode:36};
+    const key = action==='rust' ? {key:'r',code:'KeyR',windowsVirtualKeyCode:82,text:'r'} : {key:'a',code:'KeyA',windowsVirtualKeyCode:65,text:'a'};
     await command({type:'keyDown',...key});
     await command({type:'keyUp',...key,text:undefined});
     socket.destroy();
