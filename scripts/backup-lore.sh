@@ -9,12 +9,12 @@ LOCAL_DIR="/var/tmp/lore-backups"
 
 REMOTE_USER="feanor08"
 REMOTE_HOST="192.168.0.168"
-REMOTE_DIR="/srv/thg-backup/lore"
+REMOTE_ROOT="/srv/thg-backup"
+REMOTE_DIR="${REMOTE_ROOT}/lore"
+REMOTE_FS_UUID="1d347b64-77cd-4e2b-8f90-aa78b5284593"
 
 SSH_KEY="/home/feanor08/.ssh/id_ed25519_lore_backup"
 KNOWN_HOSTS="/home/feanor08/.ssh/known_hosts"
-
-RETENTION_DAYS=14
 
 TIMESTAMP="$(date -u +'%Y%m%dT%H%M%SZ')"
 ARCHIVE_NAME="lore-full-${TIMESTAMP}.tar.gz"
@@ -22,6 +22,7 @@ SHA_NAME="${ARCHIVE_NAME}.sha256"
 
 LOCAL_ARCHIVE="${LOCAL_DIR}/${ARCHIVE_NAME}"
 LOCAL_SHA="${LOCAL_DIR}/${SHA_NAME}"
+SOURCE_VERSION="$(git -C "$(dirname "${COMPOSE_FILE}")" rev-parse HEAD 2>/dev/null || printf 'unknown')"
 
 SSH_OPTS=(
     -i "${SSH_KEY}"
@@ -44,6 +45,8 @@ trap restart_trilium_if_needed EXIT INT TERM
 mkdir -p "${LOCAL_DIR}"
 
 echo "Creating Lore backup: ${ARCHIVE_NAME}"
+echo "source_version=${SOURCE_VERSION}"
+echo "created_at_utc=${TIMESTAMP}"
 
 echo "Stopping Trilium..."
 docker compose -f "${COMPOSE_FILE}" stop trilium
@@ -81,13 +84,26 @@ for attempt in $(seq 1 30); do
     sleep 2
 done
 
-echo "Checking archive integrity..."
+echo "Checking local archive integrity..."
 tar -tzf "${LOCAL_ARCHIVE}" >/dev/null
 
 (
     cd "${LOCAL_DIR}"
     sha256sum "${ARCHIVE_NAME}" > "${SHA_NAME}"
 )
+ARCHIVE_SHA="$(awk '{print $1}' "${LOCAL_SHA}")"
+
+echo "Verifying canonical remote backup filesystem..."
+ACTUAL_REMOTE_UUID="$(
+    ssh "${SSH_OPTS[@]}" \
+        "${REMOTE_USER}@${REMOTE_HOST}" \
+        "findmnt -T '${REMOTE_ROOT}' -n -o UUID"
+)"
+if [[ "${ACTUAL_REMOTE_UUID}" != "${REMOTE_FS_UUID}" ]]; then
+    echo "ERROR: ${REMOTE_ROOT} UUID is ${ACTUAL_REMOTE_UUID:-missing}; expected ${REMOTE_FS_UUID}" >&2
+    exit 1
+fi
+echo "destination_uuid=${ACTUAL_REMOTE_UUID}"
 
 echo "Preparing remote backup directory..."
 ssh "${SSH_OPTS[@]}" \
@@ -100,17 +116,16 @@ scp "${SSH_OPTS[@]}" \
     "${LOCAL_SHA}" \
     "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/"
 
-echo "Verifying remote checksum..."
+echo "Verifying remote checksum and archive integrity..."
 ssh "${SSH_OPTS[@]}" \
     "${REMOTE_USER}@${REMOTE_HOST}" \
-    "cd '${REMOTE_DIR}' && sha256sum -c '${SHA_NAME}' && chmod 600 '${ARCHIVE_NAME}' '${SHA_NAME}'"
+    "cd '${REMOTE_DIR}' && sha256sum -c '${SHA_NAME}' && tar -tzf '${ARCHIVE_NAME}' >/dev/null && chmod 600 '${ARCHIVE_NAME}' '${SHA_NAME}'"
 
-echo "Removing backups older than ${RETENTION_DAYS} days..."
-ssh "${SSH_OPTS[@]}" \
-    "${REMOTE_USER}@${REMOTE_HOST}" \
-    "find '${REMOTE_DIR}' -maxdepth 1 -type f -name 'lore-full-*' -mtime +${RETENTION_DAYS} -delete"
+# Retention is deliberately not enforced here. Historical backups are preserved
+# until an explicit, separately reviewed retention policy is approved.
 
 rm -f "${LOCAL_ARCHIVE}" "${LOCAL_SHA}"
 
 echo "Lore backup completed successfully."
 echo "Remote backup: ${REMOTE_DIR}/${ARCHIVE_NAME}"
+echo "archive_sha256=${ARCHIVE_SHA}"
