@@ -9,7 +9,7 @@ LOCAL_DIR="/var/tmp/lore-backups"
 
 REMOTE_USER="feanor08"
 REMOTE_HOST="192.168.0.168"
-REMOTE_DIR="/srv/thg-data/backups/lore"
+REMOTE_DIR="/srv/thg-backup/lore"
 
 SSH_KEY="/home/feanor08/.ssh/id_ed25519_lore_backup"
 KNOWN_HOSTS="/home/feanor08/.ssh/known_hosts"
